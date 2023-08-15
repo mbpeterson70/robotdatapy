@@ -4,7 +4,13 @@ from scipy.spatial.transform import Slerp
 import pandas as pd
 from rosbags.highlevel import AnyReader
 from pathlib import Path
-import cv_bridge
+
+# ROS dependencies
+try:
+    import cv_bridge
+except:
+    print("Warning: import cv_bridge failed. Is ROS installed and sourced? " + 
+          "Without cv_bridge, the ImgData class may fail.")
 
 class RobotData():
     """
