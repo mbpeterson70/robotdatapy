@@ -218,7 +218,7 @@ class ImgData(RobotData):
     Class for easy access to image data over time
     """
     
-    def __init__(self, data_file, file_type, topic=None, time_tol=.1, t0=None, time_range=None): 
+    def __init__(self, data_file, file_type, topic=None, time_tol=.1, t0=None, time_range=None, compressed=True): 
         """
         Class for easy access to image data over time
 
@@ -232,12 +232,14 @@ class ImgData(RobotData):
                 the data_file. Defaults to None.
             time_range (list, shape=(2,), optional): Two element list indicating range of times
                 (before being offset with t0) that should be stored within object
+            compressed (bool, optional): True if data_file contains compressed images
         """        
         if file_type == 'bag':
-            self._extract_bag_data(data_file, topic, time_range)
+            self._extract_bag_data(data_file, topic, time_range, compressed)
         else:
             assert False, "file_type not supported, please choose from: bag"
 
+        self.compressed = compressed
         self.data_file = data_file
         self.file_type = file_type
         self.interp = False
@@ -257,7 +259,7 @@ class ImgData(RobotData):
         assert time_range[0] < time_range[1], "time_range must be given in incrementing order"
         
         times = []
-        compressed_imgs = []
+        img_msgs = []
         with AnyReader([Path(bag_file)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
@@ -271,9 +273,9 @@ class ImgData(RobotData):
                     break
 
                 times.append(t)
-                compressed_imgs.append(msg)
+                img_msgs.append(msg)
         
-        self.compressed_imgs = [msg for _, msg in sorted(zip(times, compressed_imgs), key=lambda zipped: zipped[0])]
+        self.img_msgs = [msg for _, msg in sorted(zip(times, img_msgs), key=lambda zipped: zipped[0])]
         self.times = np.array(sorted(times))
     
     def extract_params(self, topic):
@@ -311,6 +313,8 @@ class ImgData(RobotData):
         idx = self.idx(t)
         if idx is None:
             return None
+        elif not self.compressed:
+            img = self.bridge.imgmsg_to_cv2(self.img_msgs[idx], desired_encoding='bgr8')
         else:
-            img = self.bridge.compressed_imgmsg_to_cv2(self.compressed_imgs[idx], desired_encoding='bgr8')
+            img = self.bridge.compressed_imgmsg_to_cv2(self.img_msgs[idx], desired_encoding='bgr8')
         return img
