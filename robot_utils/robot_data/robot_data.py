@@ -8,6 +8,7 @@ class RobotData():
         self.time_tol = time_tol
         if t0 is not None:
             self.times -= self.times[0] + t0
+        self.interp = False
             
     def idx(self, t):
         """
@@ -48,3 +49,10 @@ class RobotData():
             return None
         else: 
             return idx
+        
+    def get_val(self, val, t):
+        idx = self.idx(t)
+        if idx is None:
+            return None
+        else:
+            return val[idx]
