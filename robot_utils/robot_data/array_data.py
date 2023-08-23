@@ -22,8 +22,7 @@ class ArrayData(RobotData):
         """
         self.times = np.array(time_array)
         self._data = np.array(data_array)
-        self.interp = interp
-        super().__init__(time_tol=time_tol, t0=t0)
+        super().__init__(time_tol=time_tol, t0=t0, interp=interp)
                 
     def data(self, t):
         """
@@ -41,4 +40,4 @@ class ArrayData(RobotData):
         if self.interp:
             return np.interp(t, xp=self.times, fp=self._data)
         else:
-            return self.positions[idx]
+            return self._data[idx,:]

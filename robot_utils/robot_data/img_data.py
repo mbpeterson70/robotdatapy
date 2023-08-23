@@ -42,7 +42,7 @@ class ImgData(RobotData):
         self.file_type = file_type
         self.interp = False
         self.bridge = cv_bridge.CvBridge()
-        super().__init__(time_tol=time_tol, t0=t0)
+        super().__init__(time_tol=time_tol, t0=t0, interp=False)
             
     def _extract_bag_data(self, bag_file, topic, time_range=None):
         """

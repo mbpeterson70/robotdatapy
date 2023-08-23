@@ -32,8 +32,7 @@ class PoseData(RobotData):
             self._extract_bag_data(data_file, topic)
         else:
             assert False, "file_type not supported, please choose from: csv or bag2"
-        self.interp = interp
-        super().__init__(time_tol=time_tol, t0=t0)
+        super().__init__(time_tol=time_tol, t0=t0, interp=interp)
         
     
     def _extract_csv_data(self, csv_file, csv_options):
