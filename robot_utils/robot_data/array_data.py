@@ -38,6 +38,11 @@ class ArrayData(RobotData):
         if idx is None:
             return None
         if self.interp:
-            return np.interp(t, xp=self.times, fp=self._data)
+            if np.allclose(*self.times[idx].tolist()):
+                return self._data[idx[0],:]
+            else:
+                return self._data[idx[0]] + \
+                    (self._data[idx[1],:] - self._data[idx[0],:]) * \
+                    (t - self.times[idx[0]]) / (self.times[idx[1]] - self.times[idx[0]])
         else:
             return self._data[idx,:]
