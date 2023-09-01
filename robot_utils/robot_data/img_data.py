@@ -100,15 +100,17 @@ class ImgData(RobotData):
         """
         if self.file_type == 'bag':
             self.K = None
+            self.D = None
             with AnyReader([Path(self.data_file)]) as reader:
                 connections = [x for x in reader.connections if x.topic == topic]
                 for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                     if connection.topic == topic:
                         msg = reader.deserialize(rawdata, connection.msgtype)
                         self.K = np.array(msg.k).reshape((3,3))
+                        self.D = np.array(msg.d)
         else:
             assert False, "file_type not supported, please choose from: bag"
-        return self.K
+        return self.K, self.D
         
     def img(self, t):
         """
