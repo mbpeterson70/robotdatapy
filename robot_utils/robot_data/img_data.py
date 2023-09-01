@@ -42,7 +42,7 @@ class ImgData(RobotData):
                 (before being offset with t0) that should be stored within object
             compressed (bool, optional): True if data_file contains compressed images
         """        
-        if file_type == 'bag':
+        if file_type == 'bag' or file_type == 'bag2':
             self._extract_bag_data(data_file, topic, time_range)
         else:
             assert False, "file_type not supported, please choose from: bag"
@@ -88,7 +88,7 @@ class ImgData(RobotData):
         self.img_msgs = [msg for _, msg in sorted(zip(times, img_msgs), key=lambda zipped: zipped[0])]
         self.times = np.array(sorted(times))
     
-    def extract_params(self, topic):
+    def extract_params(self, topic, ):
         """
         Get camera parameters
 
@@ -98,7 +98,7 @@ class ImgData(RobotData):
         Returns:
             np.array, shape=(3,3): camera intrinsic matrix K
         """
-        if self.file_type == 'bag':
+        if self.file_type == 'bag' or self.file_type == 'bag2':
             self.K = None
             self.D = None
             with AnyReader([Path(self.data_file)]) as reader:
@@ -106,8 +106,12 @@ class ImgData(RobotData):
                 for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                     if connection.topic == topic:
                         msg = reader.deserialize(rawdata, connection.msgtype)
-                        self.K = np.array(msg.k).reshape((3,3))
-                        self.D = np.array(msg.d)
+                        if self.file_type == 'bag':
+                            self.K = np.array(msg.K).reshape((3,3))
+                            self.D = np.array(msg.D)
+                        elif self.file_type == 'bag2':
+                            self.K = np.array(msg.k).reshape((3,3))
+                            self.D = np.array(msg.d)
         else:
             assert False, "file_type not supported, please choose from: bag"
         return self.K, self.D
