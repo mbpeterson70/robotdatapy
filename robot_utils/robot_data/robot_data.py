@@ -56,3 +56,6 @@ class RobotData():
             return None
         else:
             return val[idx]
+        
+    def __len__(self):
+        return len(self.times)

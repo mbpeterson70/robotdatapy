@@ -16,7 +16,17 @@ class ImgData(RobotData):
     Class for easy access to image data over time
     """
     
-    def __init__(self, data_file, file_type, topic=None, time_tol=.1, t0=None, time_range=None, compressed=True): 
+    def __init__(
+            self, 
+            data_file, 
+            file_type, 
+            topic=None, 
+            time_tol=.1, 
+            t0=None, 
+            time_range=None, 
+            compressed=True,
+            compressed_encoding='passthrough'
+        ): 
         """
         Class for easy access to image data over time
 
@@ -38,6 +48,7 @@ class ImgData(RobotData):
             assert False, "file_type not supported, please choose from: bag"
 
         self.compressed = compressed
+        self.compressed_encoding = compressed_encoding
         self.data_file = data_file
         self.file_type = file_type
         self.interp = False
@@ -113,7 +124,7 @@ class ImgData(RobotData):
         if idx is None:
             return None
         elif not self.compressed:
-            img = self.bridge.imgmsg_to_cv2(self.img_msgs[idx], desired_encoding='bgr8')
+            img = self.bridge.imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
         else:
-            img = self.bridge.compressed_imgmsg_to_cv2(self.img_msgs[idx], desired_encoding='bgr8')
+            img = self.bridge.compressed_imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
         return img
