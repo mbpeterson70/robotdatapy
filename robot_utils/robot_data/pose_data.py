@@ -5,6 +5,8 @@ import pandas as pd
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 from robot_utils.robot_data.robot_data import RobotData
+
+# TODO: maybe add a transform_pose function and a transform_by_pose function
     
 class PoseData(RobotData):
     """
@@ -86,8 +88,14 @@ class PoseData(RobotData):
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 times.append(msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9)
-                positions.append([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
-                orientations.append([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
+                if type(msg).__name__ == 'geometry_msgs__msg__PoseStamped':
+                    pose = msg.pose
+                elif type(msg).__name__ == 'nav_msgs__msg__Odometry':
+                    pose = msg.pose.pose
+                else:
+                    assert False, "invalid msg type (not PoseStamped or Odometry)"
+                positions.append([pose.position.x, pose.position.y, pose.position.z])
+                orientations.append([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
         self.times = np.array(times)
         self.positions = np.array(positions)
         self.orientations = np.array(orientations)
