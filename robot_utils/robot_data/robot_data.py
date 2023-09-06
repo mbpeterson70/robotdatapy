@@ -41,11 +41,13 @@ class RobotData():
         else: 
             idx = op2
         
-        if self.interp:
+        if self.interp and (abs(self.times[idx[0]] - t) > self.time_tol or \
+                            abs(self.times[idx[1]] - t) > self.time_tol):
+            return None
+        elif self.interp:
             return idx
-        
         # check to make sure found time is close enough
-        if abs(self.times[idx] - t) > self.time_tol: 
+        elif abs(self.times[idx] - t) > self.time_tol:
             return None
         else: 
             return idx
