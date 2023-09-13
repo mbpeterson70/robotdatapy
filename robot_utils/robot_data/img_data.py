@@ -42,6 +42,7 @@ class ImgData(RobotData):
                 (before being offset with t0) that should be stored within object
             compressed (bool, optional): True if data_file contains compressed images
         """        
+        super().__init__(time_tol=time_tol, interp=False)
         if file_type == 'bag' or file_type == 'bag2':
             self._extract_bag_data(data_file, topic, time_range)
         else:
@@ -53,7 +54,8 @@ class ImgData(RobotData):
         self.file_type = file_type
         self.interp = False
         self.bridge = cv_bridge.CvBridge()
-        super().__init__(time_tol=time_tol, t0=t0, interp=False)
+        if t0 is not None:
+            self.set_t0(t0)
             
     def _extract_bag_data(self, bag_file, topic, time_range=None):
         """
@@ -106,12 +108,13 @@ class ImgData(RobotData):
                 for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                     if connection.topic == topic:
                         msg = reader.deserialize(rawdata, connection.msgtype)
-                        if self.file_type == 'bag':
+                        try:
                             self.K = np.array(msg.K).reshape((3,3))
                             self.D = np.array(msg.D)
-                        elif self.file_type == 'bag2':
+                        except:
                             self.K = np.array(msg.k).reshape((3,3))
                             self.D = np.array(msg.d)
+                        break
         else:
             assert False, "file_type not supported, please choose from: bag"
         return self.K, self.D

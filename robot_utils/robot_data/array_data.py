@@ -20,10 +20,11 @@ class ArrayData(RobotData):
             t0 (float, optional): Local time at the first msg. If not set, uses global time from 
                 the data_file. Defaults to None.
         """
-        self.times = np.array(time_array)
-        self._data = np.array(data_array)
-        super().__init__(time_tol=time_tol, t0=t0, interp=interp)
-                
+        super().__init__(time_tol=time_tol, interp=interp)
+        
+        if t0 is not None:
+            self.set_t0(t0)                
+
     def data(self, t):
         """
         Data at time t.

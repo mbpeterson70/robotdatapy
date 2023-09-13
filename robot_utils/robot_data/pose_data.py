@@ -28,13 +28,15 @@ class PoseData(RobotData):
                 the data_file. Defaults to None.
             csv_option (dict, optional): See _extract_csv_data for details. Defaults to None.
         """
+        super().__init__(time_tol=time_tol, interp=interp)
         if file_type == 'csv':
             self._extract_csv_data(data_file, csv_options)
         elif file_type == 'bag':
             self._extract_bag_data(data_file, topic)
         else:
             assert False, "file_type not supported, please choose from: csv or bag2"
-        super().__init__(time_tol=time_tol, t0=t0, interp=interp)
+        if t0 is not None:
+            self.set_t0(t0)
         
     
     def _extract_csv_data(self, csv_file, csv_options):

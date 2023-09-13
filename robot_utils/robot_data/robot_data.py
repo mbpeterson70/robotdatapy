@@ -4,11 +4,15 @@ class RobotData():
     """
     Parent class for easy access to robotics data over time
     """
-    def __init__(self, time_tol=.1, t0=None, interp=False):
+    def __init__(self, time_tol=.1, interp=False):
         self.time_tol = time_tol
-        if t0 is not None:
-            self.times -= self.times[0] + t0
         self.interp = interp
+        
+    def set_t0(self, t0):
+        self.times += -self.times[0] + t0
+        
+    def set_times(self, times):
+        self.times = times
             
     def idx(self, t):
         """
