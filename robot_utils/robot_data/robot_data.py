@@ -1,5 +1,11 @@
 import numpy as np
 
+class NoDataNearTimeException(Exception):
+    
+    def __init__(self, t_desired, t_closest=None):
+        message = f"Desired time: {t_desired}. Closest time: {t_closest}"
+        super().__init__(message)
+
 class RobotData():
     """
     Parent class for easy access to robotics data over time
@@ -28,7 +34,7 @@ class RobotData():
         op1_exists = np.where(self.times <= t)[0].shape[0]
         op2_exists = np.where(self.times >= t)[0].shape[0]
         if not op1_exists and not op2_exists:
-            idx = None
+            raise NoDataNearTimeException(t_desired=t)
         if op1_exists:
             op1 = np.where(self.times <= t)[0][-1]
         if op2_exists:
@@ -47,21 +53,19 @@ class RobotData():
         
         if self.interp and (abs(self.times[idx[0]] - t) > self.time_tol or \
                             abs(self.times[idx[1]] - t) > self.time_tol):
-            return None
+            raise NoDataNearTimeException(t_desired=t, 
+                                          t_closest=[self.times[idx[0]], self.times[idx[1]]])
         elif self.interp:
             return idx
         # check to make sure found time is close enough
         elif abs(self.times[idx] - t) > self.time_tol:
-            return None
+            raise NoDataNearTimeException(t_desired=t, t_closest=self.times[idx])
         else: 
             return idx
         
     def get_val(self, val, t):
         idx = self.idx(t)
-        if idx is None:
-            return None
-        else:
-            return val[idx]
+        return val[idx]
         
     def __len__(self):
         return len(self.times)

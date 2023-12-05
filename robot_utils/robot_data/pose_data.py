@@ -13,7 +13,7 @@ class PoseData(RobotData):
     Class for easy access to object poses over time
     """
     
-    def __init__(self, data_file, file_type, interp=False, topic=None, time_tol=.1, t0=None, csv_options=None): 
+    def __init__(self, data_file, file_type, interp=False, topic=None, time_tol=.1, t0=None, csv_options=None, T_recorded_body=None): 
         """
         Class for easy access to object poses over time
 
@@ -27,6 +27,8 @@ class PoseData(RobotData):
             t0 (float, optional): Local time at the first msg. If not set, uses global time from 
                 the data_file. Defaults to None.
             csv_option (dict, optional): See _extract_csv_data for details. Defaults to None.
+            T_recorded_body (np.array, shape(4,4)): Rigid transform from body frame to the frame 
+                the data was recorded in. 
         """
         super().__init__(time_tol=time_tol, interp=interp)
         if file_type == 'csv':
@@ -37,6 +39,9 @@ class PoseData(RobotData):
             assert False, "file_type not supported, please choose from: csv or bag2"
         if t0 is not None:
             self.set_t0(t0)
+        self.T_recorded_body = T_recorded_body
+        if self.T_recorded_body is not None:
+            print("WARNING: T_recorded_body only affects T_WB, not position and orientation functions. Not fully implemented.")
         
     
     def _extract_csv_data(self, csv_file, csv_options):
@@ -113,16 +118,16 @@ class PoseData(RobotData):
             np.array, shape(3,): position in xyz
         """
         idx = self.idx(t)
-        if idx is None:
-            return None
         if self.interp:
             if np.allclose(*self.times[idx].tolist()):
-                return self.positions[idx[0]]
-            return self.positions[idx[0]] + \
-                (self.positions[idx[1]] - self.positions[idx[0]]) * \
-                (t - self.times[idx[0]]) / (self.times[idx[1]] - self.times[idx[0]])
+                position = self.positions[idx[0]]
+            else:
+                position = self.positions[idx[0]] + \
+                    (self.positions[idx[1]] - self.positions[idx[0]]) * \
+                    (t - self.times[idx[0]]) / (self.times[idx[1]] - self.times[idx[0]])
         else:
-            return self.positions[idx]
+            position = self.positions[idx]
+        return position
     
     def orientation(self, t):
         """
@@ -134,10 +139,7 @@ class PoseData(RobotData):
         Returns:
             np.array, shape(4,): orientation as a quaternion
         """
-        idx = self.idx(t)
-        if idx is None:
-            return None
-        
+        idx = self.idx(t)        
         if self.interp:
             if np.allclose(*self.times[idx].tolist()):
                 return self.orientations[idx[0]]
@@ -164,4 +166,6 @@ class PoseData(RobotData):
         T_WB = np.eye(4)
         T_WB[:3,:3] = Rot.from_quat(orientation).as_matrix()
         T_WB[:3,3] = position
+        if self.T_recorded_body is not None:
+            T_WB = T_WB @ self.T_recorded_body
         return T_WB
