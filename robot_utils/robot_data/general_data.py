@@ -33,7 +33,7 @@ class GeneralData(RobotData):
         elif data_type == 'list':
             assert data is not None and times is not None
             self._data = deepcopy(data)
-            self.times = np.array(times)
+            self.set_times(np.array(times))
         if t0 is not None:
             self.set_t0(t0)                
             
@@ -61,7 +61,7 @@ class GeneralData(RobotData):
                     for attr in sub_attrs:
                          item = getattr(item, attr)
                 data.append(item)
-        self.times = np.array(times)
+        self.set_times(np.array(times))
         self._data = data
             
     def data(self, t):

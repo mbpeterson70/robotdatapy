@@ -60,7 +60,7 @@ class PoseData(RobotData):
                 'pose.orientation.x', 'pose.orientation.y', 'pose.orientation.z', 'pose.orientation.w'])
             self.positions = pd.DataFrame.to_numpy(pose_df.iloc[:, 2:5])
             self.orientations = pd.DataFrame.to_numpy(pose_df.iloc[:, 5:9])
-            self.times =( pd.DataFrame.to_numpy(pose_df.iloc[:,0:1]) + pd.DataFrame.to_numpy(pose_df.iloc[:,1:2])*1e-9).reshape(-1)
+            self.set_times((pd.DataFrame.to_numpy(pose_df.iloc[:,0:1]) + pd.DataFrame.to_numpy(pose_df.iloc[:,1:2])*1e-9).reshape(-1))
         else:
             cols = csv_options['cols']
             pose_df = pd.read_csv(csv_file, usecols=cols['time'] + cols['position'] + cols['orientation'])
@@ -73,7 +73,7 @@ class PoseData(RobotData):
                 t_cn, pos_cn, ori_cn = [0], [1,2,3], [4,5,6,7]
             self.positions = pd.DataFrame.to_numpy(pose_df.iloc[:, pos_cn])
             self.orientations = pd.DataFrame.to_numpy(pose_df.iloc[:, ori_cn])
-            self.times = pd.DataFrame.to_numpy(pose_df.iloc[:,t_cn]).astype(np.float64).reshape(-1)
+            self.set_times(pd.DataFrame.to_numpy(pose_df.iloc[:,t_cn]).astype(np.float64).reshape(-1))
 
             if 'timescale' in csv_options:
                 self.times *= csv_options['timescale']
@@ -103,7 +103,7 @@ class PoseData(RobotData):
                     assert False, "invalid msg type (not PoseStamped or Odometry)"
                 positions.append([pose.position.x, pose.position.y, pose.position.z])
                 orientations.append([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
-        self.times = np.array(times)
+        self.set_times(np.array(times))
         self.positions = np.array(positions)
         self.orientations = np.array(orientations)
                 
@@ -119,7 +119,7 @@ class PoseData(RobotData):
         """
         idx = self.idx(t)
         if self.interp:
-            if np.allclose(*self.times[idx].tolist()):
+            if idx[0] == idx[1]:
                 position = self.positions[idx[0]]
             else:
                 position = self.positions[idx[0]] + \
@@ -141,7 +141,7 @@ class PoseData(RobotData):
         """
         idx = self.idx(t)        
         if self.interp:
-            if np.allclose(*self.times[idx].tolist()):
+            if idx[0] == idx[1]:
                 return self.orientations[idx[0]]
             orientations = Rot.from_quat(self.orientations[idx])
             slerp = Slerp(self.times[idx], orientations)

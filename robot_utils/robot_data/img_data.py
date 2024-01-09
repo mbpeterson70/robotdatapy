@@ -2,7 +2,10 @@ import numpy as np
 import pandas as pd
 from rosbags.highlevel import AnyReader
 from pathlib import Path
+from dataclasses import dataclass
 from robot_utils.robot_data.robot_data import RobotData
+
+# TODO: support non-rvl compressed depth images
 
 # ROS dependencies
 try:
@@ -10,6 +13,12 @@ try:
 except:
     print("Warning: import cv_bridge failed. Is ROS installed and sourced? " + 
           "Without cv_bridge, the ImgData class may fail.")    
+    
+class MsgNotFound(Exception):
+    
+    def __init__(self, topic):
+        message = f"Message from topic {topic} not found"
+        super().__init__(message)
         
 class ImgData(RobotData):
     """
@@ -25,7 +34,8 @@ class ImgData(RobotData):
             t0=None, 
             time_range=None, 
             compressed=True,
-            compressed_encoding='passthrough'
+            compressed_encoding='passthrough',
+            compressed_rvl=False
         ): 
         """
         Class for easy access to image data over time
@@ -50,12 +60,15 @@ class ImgData(RobotData):
 
         self.compressed = compressed
         self.compressed_encoding = compressed_encoding
+        self.compressed_rvl = compressed_rvl
         self.data_file = data_file
         self.file_type = file_type
         self.interp = False
         self.bridge = cv_bridge.CvBridge()
         if t0 is not None:
             self.set_t0(t0)
+            
+        self.camera_params = CameraParams()
             
     def _extract_bag_data(self, bag_file, topic, time_range=None):
         """
@@ -88,7 +101,7 @@ class ImgData(RobotData):
                 img_msgs.append(msg)
         
         self.img_msgs = [msg for _, msg in sorted(zip(times, img_msgs), key=lambda zipped: zipped[0])]
-        self.times = np.array(sorted(times))
+        self.set_times(np.array(sorted(times)))
     
     def extract_params(self, topic, ):
         """
@@ -101,23 +114,24 @@ class ImgData(RobotData):
             np.array, shape=(3,3): camera intrinsic matrix K
         """
         if self.file_type == 'bag' or self.file_type == 'bag2':
-            self.K = None
-            self.D = None
             with AnyReader([Path(self.data_file)]) as reader:
                 connections = [x for x in reader.connections if x.topic == topic]
                 for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                     if connection.topic == topic:
                         msg = reader.deserialize(rawdata, connection.msgtype)
                         try:
-                            self.K = np.array(msg.K).reshape((3,3))
-                            self.D = np.array(msg.D)
+                            K = np.array(msg.K).reshape((3,3))
+                            D = np.array(msg.D)
                         except:
-                            self.K = np.array(msg.k).reshape((3,3))
-                            self.D = np.array(msg.d)
+                            K = np.array(msg.k).reshape((3,3))
+                            D = np.array(msg.d)
+                        width = msg.width
+                        height = msg.height
+                        self.camera_params = CameraParams(K, D, width, height)
                         break
         else:
             assert False, "file_type not supported, please choose from: bag"
-        return self.K, self.D
+        return self.camera_params.K, self.camera_params.D
         
     def img(self, t):
         """
@@ -134,6 +148,59 @@ class ImgData(RobotData):
             return None
         elif not self.compressed:
             img = self.bridge.imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
+        elif self.compressed_rvl:
+            from rvl import decompress_rvl
+            assert self.width is not None and self.height is not None
+            img = decompress_rvl(
+                np.array(self.img_msgs[idx].data[20:]).astype(np.int8), 
+                self.height*self.width).reshape((self.height, self.width))
         else:
             img = self.bridge.compressed_imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
         return img
+    
+    @property
+    def K(self):
+        return self.camera_params.K
+    
+    @property
+    def D(self):
+        return self.camera_params.D
+    
+    @property
+    def width(self):
+        return self.camera_params.width
+    
+    @property
+    def height(self):
+        return self.camera_params.height
+    
+    @property
+    def T(self):
+        return self.camera_params.T
+    
+
+@dataclass
+class CameraParams:
+    K: np.array = None
+    D: np.array = None
+    width: int  = None
+    height: int = None
+    T: np.array = None
+
+    @classmethod
+    def from_bag(cls, file, topic):
+        with AnyReader([Path(file)]) as reader:
+            connections = [x for x in reader.connections if x.topic == topic]
+            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+                if connection.topic == topic:
+                    msg = reader.deserialize(rawdata, connection.msgtype)
+                    try:
+                        K = np.array(msg.K).reshape((3,3))
+                        D = np.array(msg.D)
+                    except:
+                        K = np.array(msg.k).reshape((3,3))
+                        D = np.array(msg.d)
+                    width = msg.width
+                    height = msg.height
+                    return cls(K, D, width, height)
+        raise MsgNotFound(topic)

@@ -16,9 +16,13 @@ class RobotData():
         
     def set_t0(self, t0):
         self.times += -self.times[0] + t0
+        self.t0 = t0
+        self.tf = self.times[-1]
         
     def set_times(self, times):
-        self.times = times
+        self.times = np.array(times)
+        self.t0 = self.times[0]
+        self.tf = self.times[-1]
             
     def idx(self, t):
         """
