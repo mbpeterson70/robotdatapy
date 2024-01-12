@@ -6,7 +6,7 @@ class ArrayData(RobotData):
     Class for easy access to generic numpy array robot data over time
     """
     
-    def __init__(self, time_array, data_array, interp=False, time_tol=.1, t0=None): 
+    def __init__(self, time_array, data_array, interp=False, causal=False, time_tol=.1, t0=None): 
         """
         Class for easy access to object poses over time
 
@@ -20,7 +20,7 @@ class ArrayData(RobotData):
             t0 (float, optional): Local time at the first msg. If not set, uses global time from 
                 the data_file. Defaults to None.
         """
-        super().__init__(time_tol=time_tol, interp=interp)
+        super().__init__(time_tol=time_tol, interp=interp, causal=causal)
         
         if t0 is not None:
             self.set_t0(t0)                

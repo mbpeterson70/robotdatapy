@@ -3,6 +3,8 @@ import numpy as np
 class NoDataNearTimeException(Exception):
     
     def __init__(self, t_desired, t_closest=None):
+        self.t_desired = t_desired
+        self.t_closest = t_closest
         message = f"Desired time: {t_desired}. Closest time: {t_closest}"
         super().__init__(message)
 
@@ -10,9 +12,11 @@ class RobotData():
     """
     Parent class for easy access to robotics data over time
     """
-    def __init__(self, time_tol=.1, interp=False):
+    def __init__(self, time_tol=.1, interp=False, causal=False):
         self.time_tol = time_tol
         self.interp = interp
+        self.causal = causal
+        assert not (self.interp and self.causal), "Cannot interpolate and be causal"
         
     def set_t0(self, t0):
         self.times += -self.times[0] + t0
@@ -37,14 +41,17 @@ class RobotData():
         """
         op1_exists = np.where(self.times <= t)[0].shape[0]
         op2_exists = np.where(self.times >= t)[0].shape[0]
-        if not op1_exists and not op2_exists:
+        if (not op1_exists and not op2_exists) or \
+            (not op1_exists and self.causal):
             raise NoDataNearTimeException(t_desired=t)
         if op1_exists:
             op1 = np.where(self.times <= t)[0][-1]
         if op2_exists:
             op2 = np.where(self.times >= t)[0][0]
-            
-        if not op1_exists: 
+
+        if self.causal:
+            idx = op1
+        elif not op1_exists: 
             idx = op2 if not self.interp else [op2, op2]
         elif not op2_exists: 
             idx = op1 if not self.interp else [op1, op1]

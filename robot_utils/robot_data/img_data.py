@@ -31,6 +31,7 @@ class ImgData(RobotData):
             file_type, 
             topic=None, 
             time_tol=.1, 
+            causal=False, 
             t0=None, 
             time_range=None, 
             compressed=True,
@@ -52,7 +53,7 @@ class ImgData(RobotData):
                 (before being offset with t0) that should be stored within object
             compressed (bool, optional): True if data_file contains compressed images
         """        
-        super().__init__(time_tol=time_tol, interp=False)
+        super().__init__(time_tol=time_tol, interp=False, causal=causal)
         if file_type == 'bag' or file_type == 'bag2':
             self._extract_bag_data(data_file, topic, time_range)
         else:

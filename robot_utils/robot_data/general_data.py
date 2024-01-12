@@ -10,7 +10,7 @@ class GeneralData(RobotData):
     Class for easy access to generic robot data over time
     """
     
-    def __init__(self, data_type, data_file=None, data=None, times=None, topic=None, field=None, time_tol=.1, t0=None): 
+    def __init__(self, data_type, data_file=None, data=None, times=None, topic=None, field=None, time_tol=.1, causal=False, t0=None): 
         """
         Class for easy access to object poses over time
 
@@ -25,7 +25,7 @@ class GeneralData(RobotData):
             t0 (float, optional): Local time at the first msg. If not set, uses global time from 
                 the data_file. Defaults to None.
         """
-        super().__init__(time_tol=time_tol, interp=False)
+        super().__init__(time_tol=time_tol, interp=False, causal=causal)
         assert data_type == 'bag' or data_type == 'list', "only bag or lists supported currently"
         if data_type == 'bag':
             assert topic is not None, "topic must be provided"

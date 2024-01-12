@@ -13,7 +13,7 @@ class PoseData(RobotData):
     Class for easy access to object poses over time
     """
     
-    def __init__(self, data_file, file_type, interp=False, topic=None, time_tol=.1, t0=None, csv_options=None, T_recorded_body=None): 
+    def __init__(self, data_file, file_type, interp=False, causal=False, topic=None, time_tol=.1, t0=None, csv_options=None, T_recorded_body=None): 
         """
         Class for easy access to object poses over time
 
@@ -30,7 +30,7 @@ class PoseData(RobotData):
             T_recorded_body (np.array, shape(4,4)): Rigid transform from body frame to the frame 
                 the data was recorded in. 
         """
-        super().__init__(time_tol=time_tol, interp=interp)
+        super().__init__(time_tol=time_tol, interp=interp, causal=causal)
         if file_type == 'csv':
             self._extract_csv_data(data_file, csv_options)
         elif file_type == 'bag':
