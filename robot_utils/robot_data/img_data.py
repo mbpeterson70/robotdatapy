@@ -88,6 +88,8 @@ class ImgData(RobotData):
         img_msgs = []
         with AnyReader([Path(bag_file)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
+            if len(connections) == 0:
+                assert False, f"topic {topic} not found in bag file {self.data_file}"
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 if connection.topic != topic:
                     continue
@@ -117,6 +119,8 @@ class ImgData(RobotData):
         if self.file_type == 'bag' or self.file_type == 'bag2':
             with AnyReader([Path(self.data_file)]) as reader:
                 connections = [x for x in reader.connections if x.topic == topic]
+                if len(connections) == 0:
+                    assert False, f"topic {topic} not found in bag file {self.data_file}"
                 for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                     if connection.topic == topic:
                         msg = reader.deserialize(rawdata, connection.msgtype)
@@ -192,6 +196,8 @@ class CameraParams:
     def from_bag(cls, file, topic):
         with AnyReader([Path(file)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
+            if len(connections) == 0:
+                assert False, f"topic {topic} not found in bag file {file}"
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 if connection.topic == topic:
                     msg = reader.deserialize(rawdata, connection.msgtype)

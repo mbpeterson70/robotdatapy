@@ -13,7 +13,7 @@ class PoseData(RobotData):
     Class for easy access to object poses over time
     """
     
-    def __init__(self, data_file, file_type, interp=False, causal=False, topic=None, time_tol=.1, t0=None, csv_options=None, T_recorded_body=None): 
+    def __init__(self, data_file, file_type, interp=False, causal=False, topic=None, time_tol=.1, t0=None, csv_options=None, T_recorded_body=None, T_premultiply=None, T_postmultiply=None): 
         """
         Class for easy access to object poses over time
 
@@ -39,9 +39,11 @@ class PoseData(RobotData):
             assert False, "file_type not supported, please choose from: csv or bag2"
         if t0 is not None:
             self.set_t0(t0)
-        self.T_recorded_body = T_recorded_body
-        if self.T_recorded_body is not None:
-            print("WARNING: T_recorded_body only affects T_WB, not position and orientation functions. Not fully implemented.")
+        self.T_premultiply = T_premultiply
+        self.T_postmultiply = T_postmultiply
+        if T_recorded_body is not None:
+            assert self.T_postmultiply is None, "T_postmultiply not supported with T_recorded_body"
+            self.T_postmultiply = T_recorded_body
         
     
     def _extract_csv_data(self, csv_file, csv_options):
@@ -92,6 +94,8 @@ class PoseData(RobotData):
         orientations = []
         with AnyReader([Path(bag_file)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
+            if len(connections) == 0:
+                assert False, f"topic {topic} not found in bag file {bag_file}"
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 times.append(msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9)
@@ -106,8 +110,38 @@ class PoseData(RobotData):
         self.set_times(np.array(times))
         self.positions = np.array(positions)
         self.orientations = np.array(orientations)
-                
+
     def position(self, t):
+        """
+        Position at time t.
+
+        Args:
+            t (float): time
+
+        Returns:
+            np.array, shape(3,): position in xyz
+        """
+        if self.T_premultiply is not None or self.T_postmultiply is not None:
+            return self.T_WB(t)[:3,3]
+        else:
+            return self._untransformed_position(t)
+        
+    def orientation(self, t):
+        """
+        Orientation at time t.
+
+        Args:
+            t (float): time
+
+        Returns:
+            np.array, shape(4,): orientation as a quaternion
+        """
+        if self.T_premultiply is not None or self.T_postmultiply is not None:
+            return Rot.from_matrix(self.T_WB(t)[:3,:3]).as_quat()
+        else:
+            return self._untransformed_orientation(t)
+                
+    def _untransformed_position(self, t):
         """
         Position at time t.
 
@@ -129,7 +163,7 @@ class PoseData(RobotData):
             position = self.positions[idx]
         return position
     
-    def orientation(self, t):
+    def _untransformed_orientation(self, t):
         """
         Orientation at time t.
 
@@ -159,13 +193,29 @@ class PoseData(RobotData):
         Returns:
             np.array, shape(4,4): Rigid body transform
         """
-        position = self.position(t)
-        orientation = self.orientation(t)
+        position = self._untransformed_position(t)
+        orientation = self._untransformed_orientation(t)
         if position is None or orientation is None:
             return None
         T_WB = np.eye(4)
         T_WB[:3,:3] = Rot.from_quat(orientation).as_matrix()
         T_WB[:3,3] = position
-        if self.T_recorded_body is not None:
-            T_WB = T_WB @ self.T_recorded_body
+        if self.T_premultiply is not None:
+            T_WB = self.T_premultiply @ T_WB
+        if self.T_postmultiply is not None:
+            T_WB = T_WB @ self.T_postmultiply
         return T_WB
+    
+    def clip(self, t0, tf):
+        """
+        Clips the data to be between t0 and tf
+
+        Args:
+            t0 (float): start time
+            tf (float): end time
+        """
+        idx0 = self.idx(t0) if not self.interp else self.idx(t0)[1]
+        idxf = self.idx(tf) if not self.interp else self.idx(tf)[0]
+        self.set_times(self.times[idx0:idxf])
+        self.positions = self.positions[idx0:idxf]
+        self.orientations = self.orientations[idx0:idxf]

@@ -20,13 +20,17 @@ class RobotData():
         
     def set_t0(self, t0):
         self.times += -self.times[0] + t0
-        self.t0 = t0
-        self.tf = self.times[-1]
         
     def set_times(self, times):
         self.times = np.array(times)
-        self.t0 = self.times[0]
-        self.tf = self.times[-1]
+
+    @property
+    def t0(self):
+        return self.times[0]
+    
+    @property
+    def tf(self):
+        return self.times[-1]
             
     def idx(self, t):
         """
@@ -74,9 +78,12 @@ class RobotData():
         else: 
             return idx
         
-    def get_val(self, val, t):
+    def get_val(self, vals, t):
         idx = self.idx(t)
-        return val[idx]
+        return vals[idx]
+    
+    def clip(self, t0, tf):
+        assert False, "clip function not implemented for this data type."
         
     def __len__(self):
         return len(self.times)
