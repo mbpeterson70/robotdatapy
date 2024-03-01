@@ -222,8 +222,8 @@ class PoseData(RobotData):
         self.positions = self.positions[idx0:idxf]
         self.orientations = self.orientations[idx0:idxf]
 
-    def plot2d(self, ax=None, dt=.1, t0=None, tf=None, axes='xy'):
-    # def plot2d(self, ax=None, dt=.1, t=None, t0=None, tf=None, axes='xy', pose=False):
+    # def plot2d(self, ax=None, dt=.1, t0=None, tf=None, axes='xy'):
+    def plot2d(self, ax=None, dt=.1, t=None, t0=None, tf=None, axes='xy', pose=False, trajectory=True, axis_len=1.0):
         """
         Plots the position data in 2D
 
@@ -233,14 +233,15 @@ class PoseData(RobotData):
             tf (float, optional): end time. Defaults to self.tf.
             axes (str, optional): axes to plot. Defaults to 'xy'.
         """
-        
+        assert t is None or (t0 is None and tf is None), "t and t0/tf cannot be given together"
+        assert trajectory or pose, "Must request plotting trajectory and/or pose"
         
         if ax is None:
             ax = plt.gca()
 
-        if t0 is None:
+        if t0 is None and t is None:
             t0 = self.t0
-        if tf is None:
+        if tf is None and t is None:
             tf = self.tf
 
         assert len(axes) == 2, "axes must be a string of length 2"
@@ -255,8 +256,20 @@ class PoseData(RobotData):
             else:
                 assert False, "axes must be a string of x, y, or z"
 
-        positions = np.array([self.position(t) for t in np.arange(t0, tf, dt)])
-        ax.plot(positions[:,ax_idx[0]], positions[:,ax_idx[1]])
+        if t is None and trajectory:
+            positions = np.array([self.position(t) for t in np.arange(t0, tf, dt)])
+            ax.plot(positions[:,ax_idx[0]], positions[:,ax_idx[1]])
+        if t is not None or pose:
+            if t is not None:
+                t = [t]
+            else:
+                t = np.arange(t0, tf, dt)
+            for ti in t:
+                for rob_ax, color in zip([0, 1, 2], ['red', 'green', 'blue']):
+                    T_WB = self.T_WB(ti)
+                    ax.plot([T_WB[ax_idx[0],3], T_WB[ax_idx[0],3] + axis_len*T_WB[ax_idx[0],rob_ax]], 
+                            [T_WB[ax_idx[1],3], T_WB[ax_idx[1],3] + axis_len*T_WB[ax_idx[1],rob_ax]], color=color)
+            
         ax.set_xlabel(axes[0])
         ax.set_ylabel(axes[1])
         ax.axis('equal')
