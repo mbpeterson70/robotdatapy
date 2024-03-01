@@ -3,8 +3,9 @@ import pandas as pd
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 from dataclasses import dataclass
-from robot_utils.robot_data.robot_data import RobotData
+import matplotlib.pyplot as plt
 
+from robot_utils.robot_data.robot_data import RobotData
 # TODO: support non-rvl compressed depth images
 
 # ROS dependencies
@@ -162,6 +163,20 @@ class ImgData(RobotData):
         else:
             img = self.bridge.compressed_imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
         return img
+    
+    def show(self, t, ax=None):
+        """
+        Show image at time t.
+
+        Args:
+            t (float): time
+        """
+        img = self.img(t)
+        if ax is None:
+            _, ax = plt.subplots()
+        ax.imshow(img[...,::-1])
+        ax.tick_params(axis='both', which='both', bottom=False, top=False, left=False, right=False, labelbottom=False, labelleft=False)
+        return ax
     
     @property
     def K(self):

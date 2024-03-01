@@ -4,6 +4,8 @@ from scipy.spatial.transform import Slerp
 import pandas as pd
 from rosbags.highlevel import AnyReader
 from pathlib import Path
+import matplotlib.pyplot as plt
+
 from robot_utils.robot_data.robot_data import RobotData
 
 # TODO: maybe add a transform_pose function and a transform_by_pose function
@@ -219,3 +221,44 @@ class PoseData(RobotData):
         self.set_times(self.times[idx0:idxf])
         self.positions = self.positions[idx0:idxf]
         self.orientations = self.orientations[idx0:idxf]
+
+    def plot2d(self, ax=None, dt=.1, t0=None, tf=None, axes='xy'):
+    # def plot2d(self, ax=None, dt=.1, t=None, t0=None, tf=None, axes='xy', pose=False):
+        """
+        Plots the position data in 2D
+
+        Args:
+            ax (matplotlib.axes._subplots.AxesSubplot): axis to plot on. Defaults to None.
+            t0 (float, optional): start time. Defaults to self.t0.
+            tf (float, optional): end time. Defaults to self.tf.
+            axes (str, optional): axes to plot. Defaults to 'xy'.
+        """
+        
+        
+        if ax is None:
+            ax = plt.gca()
+
+        if t0 is None:
+            t0 = self.t0
+        if tf is None:
+            tf = self.tf
+
+        assert len(axes) == 2, "axes must be a string of length 2"
+        ax_idx = []
+        for i in range(2):
+            if 'x' == axes[i]:
+                ax_idx.append(0)
+            elif 'y' == axes[i]:
+                ax_idx.append(1)
+            elif 'z' == axes[i]:
+                ax_idx.append(2)
+            else:
+                assert False, "axes must be a string of x, y, or z"
+
+        positions = np.array([self.position(t) for t in np.arange(t0, tf, dt)])
+        ax.plot(positions[:,ax_idx[0]], positions[:,ax_idx[1]])
+        ax.set_xlabel(axes[0])
+        ax.set_ylabel(axes[1])
+        ax.axis('equal')
+        ax.grid(True)
+        return ax
