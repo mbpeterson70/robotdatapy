@@ -82,6 +82,9 @@ class RobotData():
         idx = self.idx(t)
         return vals[idx]
     
+    def nearest_time(self, t):
+        return self.get_val(self.times, t)
+    
     def clip(self, t0, tf):
         assert False, "clip function not implemented for this data type."
         

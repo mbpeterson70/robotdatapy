@@ -90,7 +90,7 @@ class ImgData(RobotData):
         with AnyReader([Path(bag_file)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
-                assert False, f"topic {topic} not found in bag file {self.data_file}"
+                assert False, f"topic {topic} not found in bag file {bag_file}"
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 if connection.topic != topic:
                     continue
