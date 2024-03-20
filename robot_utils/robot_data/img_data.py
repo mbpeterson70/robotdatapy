@@ -174,7 +174,10 @@ class ImgData(RobotData):
         img = self.img(t)
         if ax is None:
             _, ax = plt.subplots()
-        ax.imshow(img[...,::-1])
+        if len(img.shape) == 3:
+            ax.imshow(img[...,::-1])
+        else:
+            ax.imshow(img)
         ax.tick_params(axis='both', which='both', bottom=False, top=False, left=False, right=False, labelbottom=False, labelleft=False)
         return ax
     
