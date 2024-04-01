@@ -229,3 +229,19 @@ class CameraParams:
                     height = msg.height
                     return cls(K, D, width, height)
         raise MsgNotFound(topic)
+    
+    @property
+    def fx(self):
+        return self.K[0,0]
+    
+    @property
+    def fy(self):
+        return self.K[1,1]
+    
+    @property
+    def cx(self):
+        return self.K[0,2]
+    
+    @property
+    def cy(self):
+        return self.K[1,2]
