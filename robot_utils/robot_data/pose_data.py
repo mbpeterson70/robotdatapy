@@ -2,6 +2,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 from scipy.spatial.transform import Slerp
 import pandas as pd
+import os
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -33,6 +34,7 @@ class PoseData(RobotData):
                 the data was recorded in. 
         """
         super().__init__(time_tol=time_tol, interp=interp, causal=causal)
+        data_file = os.path.expanduser(os.path.expandvars(data_file))
         if file_type == 'csv':
             self._extract_csv_data(data_file, csv_options)
         elif file_type == 'bag':

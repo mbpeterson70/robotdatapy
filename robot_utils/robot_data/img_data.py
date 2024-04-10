@@ -1,5 +1,5 @@
 import numpy as np
-import pandas as pd
+import os
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 from dataclasses import dataclass
@@ -55,6 +55,7 @@ class ImgData(RobotData):
             compressed (bool, optional): True if data_file contains compressed images
         """        
         super().__init__(time_tol=time_tol, interp=False, causal=causal)
+        data_file = os.path.expanduser(os.path.expandvars(data_file))
         if file_type == 'bag' or file_type == 'bag2':
             self._extract_bag_data(data_file, topic, time_range)
         else:

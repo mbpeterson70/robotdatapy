@@ -2,6 +2,7 @@ import numpy as np
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 from copy import deepcopy
+import os
 
 from robot_utils.robot_data.robot_data import RobotData
     
@@ -29,7 +30,7 @@ class GeneralData(RobotData):
         assert data_type == 'bag' or data_type == 'list', "only bag or lists supported currently"
         if data_type == 'bag':
             assert topic is not None, "topic must be provided"
-            self._extract_bag_data(bag_file=data_file, topic=topic, field=field)
+            self._extract_bag_data(bag_file=os.path.expanduser(os.path.expandvars(data_file)), topic=topic, field=field)
         elif data_type == 'list':
             assert data is not None and times is not None
             self._data = deepcopy(data)
