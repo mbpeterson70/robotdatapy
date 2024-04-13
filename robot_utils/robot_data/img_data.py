@@ -220,16 +220,20 @@ class CameraParams:
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 if connection.topic == topic:
                     msg = reader.deserialize(rawdata, connection.msgtype)
-                    try:
-                        K = np.array(msg.K).reshape((3,3))
-                        D = np.array(msg.D)
-                    except:
-                        K = np.array(msg.k).reshape((3,3))
-                        D = np.array(msg.d)
-                    width = msg.width
-                    height = msg.height
-                    return cls(K, D, width, height)
+                    return cls.from_msg(msg)
         raise MsgNotFound(topic)
+    
+    @classmethod
+    def from_msg(cls, msg):
+        try:
+            K = np.array(msg.K).reshape((3,3))
+            D = np.array(msg.D)
+        except:
+            K = np.array(msg.k).reshape((3,3))
+            D = np.array(msg.d)
+        width = msg.width
+        height = msg.height
+        return cls(K, D, width, height)
     
     @property
     def fx(self):
