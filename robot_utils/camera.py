@@ -1,4 +1,9 @@
 import numpy as np
+from dataclasses import dataclass
+from rosbags.highlevel import AnyReader
+from pathlib import Path
+
+from robot_utils.exceptions import MsgNotFound
 
 def pixel_depth_2_xyz(x, y, depth, K):
     """
@@ -49,3 +54,51 @@ def xyz_2_pixel(xyz, K, axis=0):
         pixel = pixel.T
     return pixel
     
+
+@dataclass
+class CameraParams:
+    K: np.array = None
+    D: np.array = None
+    width: int  = None
+    height: int = None
+    T: np.array = None
+
+    @classmethod
+    def from_bag(cls, file, topic):
+        with AnyReader([Path(file)]) as reader:
+            connections = [x for x in reader.connections if x.topic == topic]
+            if len(connections) == 0:
+                assert False, f"topic {topic} not found in bag file {file}"
+            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+                if connection.topic == topic:
+                    msg = reader.deserialize(rawdata, connection.msgtype)
+                    return cls.from_msg(msg)
+        raise MsgNotFound(topic)
+    
+    @classmethod
+    def from_msg(cls, msg):
+        try:
+            K = np.array(msg.K).reshape((3,3))
+            D = np.array(msg.D)
+        except:
+            K = np.array(msg.k).reshape((3,3))
+            D = np.array(msg.d)
+        width = msg.width
+        height = msg.height
+        return cls(K, D, width, height)
+    
+    @property
+    def fx(self):
+        return self.K[0,0]
+    
+    @property
+    def fy(self):
+        return self.K[1,1]
+    
+    @property
+    def cx(self):
+        return self.K[0,2]
+    
+    @property
+    def cy(self):
+        return self.K[1,2]

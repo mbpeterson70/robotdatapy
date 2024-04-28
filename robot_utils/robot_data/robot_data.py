@@ -3,13 +3,7 @@ import numpy as np
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 
-class NoDataNearTimeException(Exception):
-    
-    def __init__(self, t_desired, t_closest=None):
-        self.t_desired = t_desired
-        self.t_closest = t_closest
-        message = f"Desired time: {t_desired}. Closest time: {t_closest}"
-        super().__init__(message)
+from robot_utils.exceptions import NoDataNearTimeException
 
 class RobotData():
     """
