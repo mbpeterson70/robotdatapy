@@ -22,6 +22,9 @@ class ArrayData(RobotData):
         """
         super().__init__(time_tol=time_tol, interp=interp, causal=causal)
         
+        self.times = time_array
+        self._data = data_array
+        
         if t0 is not None:
             self.set_t0(t0)                
 
