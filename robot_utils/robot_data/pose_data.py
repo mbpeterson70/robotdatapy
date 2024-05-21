@@ -6,9 +6,9 @@ import os
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 import matplotlib.pyplot as plt
-
+import pykitti
 from robot_utils.robot_data.robot_data import RobotData
-
+import cv2
 # TODO: maybe add a transform_pose function and a transform_by_pose function
     
 class PoseData(RobotData):
@@ -16,13 +16,17 @@ class PoseData(RobotData):
     Class for easy access to object poses over time
     """
     
-    def __init__(self, data_file, file_type, interp=False, causal=False, topic=None, time_tol=.1, t0=None, csv_options=None, T_recorded_body=None, T_premultiply=None, T_postmultiply=None): 
+    def __init__(self, data_file, file_type, 
+                 kitti_sequence='00',
+                 interp=False, causal=False, topic=None, 
+                 time_tol=.1, t0=None, csv_options=None, 
+                 T_recorded_body=None, T_premultiply=None, T_postmultiply=None): 
         """
         Class for easy access to object poses over time
 
         Args:
             data_file (str): File path to data
-            file_type (str): 'csv' or 'bag'
+            file_type (str): 'csv' or 'bag' or 'kitti'
             interp (bool): interpolate between closest times, else choose the closest time.
             topic (str, optional): ROS topic, necessary only for bag file_type. Defaults to None.
             time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
@@ -39,12 +43,23 @@ class PoseData(RobotData):
             self._extract_csv_data(data_file, csv_options)
         elif file_type == 'bag':
             self._extract_bag_data(data_file, topic)
+        elif file_type == 'kitti':
+            self.dataset = pykitti.odometry(data_file, kitti_sequence)
+            self.poses = np.asarray(self.dataset.poses)
+            self.positions = self.poses[:, 0:3, -1]
+            self.orientations = np.asarray([Rot.as_quat(Rot.from_matrix(self.poses[i, :3, :3])) for i in range(self.poses.shape[0])])
+            self.times = np.asarray([d.total_seconds() for d in self.dataset.timestamps])
+            P2 = self.dataset.calib.P_rect_20.reshape((3, 4)) # Left RGB camera
+            k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)
+            T_recorded_body = np.vstack([np.hstack([r, t[:3]]), np.asarray([0, 0, 0, 1])])
         else:
             assert False, "file_type not supported, please choose from: csv or bag2"
         if t0 is not None:
             self.set_t0(t0)
         self.T_premultiply = T_premultiply
         self.T_postmultiply = T_postmultiply
+        self.file_type = file_type
+
         if T_recorded_body is not None:
             assert self.T_postmultiply is None, "T_postmultiply not supported with T_recorded_body"
             self.T_postmultiply = T_recorded_body

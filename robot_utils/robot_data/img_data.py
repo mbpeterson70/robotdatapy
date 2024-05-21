@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 
 from robot_utils.robot_data.robot_data import RobotData
+import cv2
+import pykitti
 from robot_utils.exceptions import MsgNotFound
 from robot_utils.camera import CameraParams
 # TODO: support non-rvl compressed depth images
@@ -25,7 +27,9 @@ class ImgData(RobotData):
     def __init__(
             self, 
             data_file, 
-            file_type, 
+            file_type,
+            kitti_sequence='00',
+            kitti_type='rgb',
             topic=None, 
             time_tol=.1, 
             causal=False, 
@@ -40,7 +44,7 @@ class ImgData(RobotData):
 
         Args:
             data_file (str): File path to data
-            file_type (str): only 'bag' supported now
+            file_type (str): only 'bag' or 'kitti supported now
             topic (str, optional): ROS topic, necessary only for bag file_type. Defaults to None.
             time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
                 no pose is available within tolerance, None is returned. Defaults to .1.
@@ -54,8 +58,16 @@ class ImgData(RobotData):
         data_file = os.path.expanduser(os.path.expandvars(data_file))
         if file_type == 'bag' or file_type == 'bag2':
             self._extract_bag_data(data_file, topic, time_range)
+        elif file_type == 'kitti' and kitti_type == 'rgb':
+            self.kitti_type = kitti_type
+            self.dataset = pykitti.odometry(data_file, kitti_sequence)
+            self.times = np.asarray([d.total_seconds() for d in self.dataset.timestamps])
+        elif file_type == 'kitti' and kitti_type == 'depth':
+            self.kitti_type = kitti_type
+            dataset = pykitti.odometry(data_file, kitti_sequence)
+            self.times = np.asarray([d.total_seconds() for d in dataset.timestamps])
         else:
-            assert False, "file_type not supported, please choose from: bag"
+            assert False, "file_type not supported, please choose from: bag, kitti"
 
         self.compressed = compressed
         self.compressed_encoding = compressed_encoding
@@ -63,6 +75,7 @@ class ImgData(RobotData):
         self.data_file = data_file
         self.file_type = file_type
         self.interp = False
+        self.kitti_sequence = kitti_sequence
         self.bridge = cv_bridge.CvBridge()
         if t0 is not None:
             self.set_t0(t0)
@@ -84,6 +97,7 @@ class ImgData(RobotData):
         
         times = []
         img_msgs = []
+        print("Extracting bag data...")
         with AnyReader([Path(bag_file)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
@@ -100,7 +114,7 @@ class ImgData(RobotData):
 
                 times.append(t)
                 img_msgs.append(msg)
-        
+        print("Finish extracting bag data.")
         self.img_msgs = [msg for _, msg in sorted(zip(times, img_msgs), key=lambda zipped: zipped[0])]
         self.set_times(np.array(sorted(times)))
     
@@ -132,6 +146,10 @@ class ImgData(RobotData):
                         height = msg.height
                         self.camera_params = CameraParams(K, D, width, height)
                         break
+        elif self.file_type == 'kitti':
+            P2 = self.dataset.calib.loc['P2:'].reshape((3, 4)) # Left RGB camera
+            k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)
+            self.camera_params = CameraParams(k, np.zeros(4), 1241, 376) # Hard coding for now.... TODO: improve this
         else:
             assert False, "file_type not supported, please choose from: bag"
         return self.camera_params.K, self.camera_params.D
@@ -147,18 +165,27 @@ class ImgData(RobotData):
             cv image
         """
         idx = self.idx(t)
-        if idx is None:
-            return None
-        elif not self.compressed:
-            img = self.bridge.imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
-        elif self.compressed_rvl:
-            from rvl import decompress_rvl
-            assert self.width is not None and self.height is not None
-            img = decompress_rvl(
-                np.array(self.img_msgs[idx].data[20:]).astype(np.int8), 
-                self.height*self.width).reshape((self.height, self.width))
-        else:
-            img = self.bridge.compressed_imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
+        if self.file_type == 'bag' or self.file_type == 'bag2':
+            if idx is None:
+                return None
+            elif not self.compressed:
+                img = self.bridge.imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
+            elif self.compressed_rvl:
+                from rvl import decompress_rvl
+                assert self.width is not None and self.height is not None
+                img = decompress_rvl(
+                    np.array(self.img_msgs[idx].data[20:]).astype(np.int8), 
+                    self.height*self.width).reshape((self.height, self.width))
+            else:
+                img = self.bridge.compressed_imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
+        elif self.file_type == 'kitti' and self.kitti_type == 'rgb':
+            pil_image = self.dataset.get_cam2(idx)
+            img = np.array(pil_image)
+            # Convert RGB to BGR
+            img = img[:, :, ::-1].copy()
+        elif self.file_type == 'kitti' and self.kitti_type == 'depth':
+            # print(idx)
+            img = np.load(self.data_file + '/sequences/' + self.kitti_sequence  + '/depth/' + str(idx).zfill(6) + '.npy')
         return img
     
     def show(self, t, ax=None):
