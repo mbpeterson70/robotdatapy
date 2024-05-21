@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 
 from robot_utils.robot_data.robot_data import RobotData
+import cv2
+import pykitti
 from robot_utils.exceptions import MsgNotFound
 from robot_utils.camera import CameraParams
 # TODO: support non-rvl compressed depth images
@@ -62,6 +64,7 @@ class ImgData(RobotData):
         self.data_path = data_path
         self.data_type = data_type
         self.interp = False
+        self.kitti_sequence = kitti_sequence
         self.bridge = cv_bridge.CvBridge()
         if t0 is not None:
             self.set_t0(t0)
@@ -142,6 +145,10 @@ class ImgData(RobotData):
                         height = msg.height
                         self.camera_params = CameraParams(K, D, width, height)
                         break
+        elif self.file_type == 'kitti':
+            P2 = self.dataset.calib.loc['P2:'].reshape((3, 4)) # Left RGB camera
+            k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)
+            self.camera_params = CameraParams(k, np.zeros(4), 1241, 376) # Hard coding for now.... TODO: improve this
         else:
             assert False, "data_type not supported, please choose from: bag"
         return self.camera_params.K, self.camera_params.D
