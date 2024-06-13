@@ -277,3 +277,56 @@ class PoseData(RobotData):
         ax.axis('equal')
         ax.grid(True)
         return ax
+    
+    @classmethod
+    def static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str):
+        """
+        Extracts a static transform from a ROS bag file. Transform is returned as T^parent_child,
+        where T is a 4x4 rigid body transform and expresses the pose of the child in the parent frame, 
+        which is equivalent to the transformation from the child frame to the parent frame.
+
+        Args:
+            parent_frame (str): parent frame
+            child_frame (str): child frame
+
+        Returns:
+            np.array, shape(4,4): static transform
+        """
+        tf_tree = {}
+        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))]) as reader:
+            connections = [x for x in reader.connections if x.topic == '/tf_static']
+            if len(connections) == 0:
+                assert False, f"topic /tf_static not found in bag file {path}"
+            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+                msg = reader.deserialize(rawdata, connection.msgtype)
+                if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
+                    for transform_msg in msg.transforms:
+                        tf_tree[transform_msg.child_frame_id] = (transform_msg.header.frame_id, transform_msg.transform)
+                        
+        if child_frame not in tf_tree:
+            assert False, f"child_frame {child_frame} not found in bag file {path}"
+
+        # compute transform by traversing up the tree from the child frame to the parent frame
+        # T_parent_child = T_parent_child1 * T_child1_child2 * ... * T_childN_child
+        T_chain = []
+        child = child_frame
+        while child != parent_frame:
+            if child not in tf_tree:
+                assert False, f"parent_frame {parent_frame} not found in bag file {path}"
+            parent, transform = tf_tree[child]
+            Ti = np.eye(4)
+            Ti[:3,:3] = Rot.from_quat([transform.rotation.x, transform.rotation.y, 
+                                      transform.rotation.z, transform.rotation.w]).as_matrix()
+            Ti[:3,3] = [transform.translation.x, transform.translation.y, transform.translation.z]
+            # transform msg is T_child_parent, the pose of the parent in the child frame or the 
+            # transform from parent to child we want in the form T_parent_child so invert
+            # actually it seems like this is not true (ROS documentation is a bit confusing)
+            # Ti = np.linalg.inv(Ti)
+            T_chain.insert(0, Ti)
+            child = parent
+            
+        T = np.eye(4)
+        for Ti in T_chain:
+            T = T @ Ti
+        
+        return T
