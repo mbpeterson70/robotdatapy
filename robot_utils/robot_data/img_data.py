@@ -24,44 +24,43 @@ class ImgData(RobotData):
     
     def __init__(
             self, 
-            data_file, 
-            file_type, 
-            topic=None, 
+            times, 
+            imgs,
+            data_path,
+            data_type,
             time_tol=.1, 
             causal=False, 
             t0=None, 
-            time_range=None, 
             compressed=True,
             compressed_encoding='passthrough',
-            compressed_rvl=False
+            compressed_rvl=False,
         ): 
         """
         Class for easy access to image data over time
 
         Args:
-            data_file (str): File path to data
-            file_type (str): only 'bag' supported now
-            topic (str, optional): ROS topic, necessary only for bag file_type. Defaults to None.
+            times (np.array, shape=(n,)): times of images
+            imgs (list, shape=(n,)): list of images or image messages
+            data_path (str): path to data file
+            data_type (str): type of data file
             time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
                 no pose is available within tolerance, None is returned. Defaults to .1.
             t0 (float, optional): Local time at the first msg. If not set, uses global time from 
-                the data_file. Defaults to None.
+                the data_path. Defaults to None.
             time_range (list, shape=(2,), optional): Two element list indicating range of times
                 (before being offset with t0) that should be stored within object
-            compressed (bool, optional): True if data_file contains compressed images
+            compressed (bool, optional): True if data_path contains compressed images
         """        
         super().__init__(time_tol=time_tol, interp=False, causal=causal)
-        data_file = os.path.expanduser(os.path.expandvars(data_file))
-        if file_type == 'bag' or file_type == 'bag2':
-            self._extract_bag_data(data_file, topic, time_range)
-        else:
-            assert False, "file_type not supported, please choose from: bag"
-
+        self.set_times(times)
+        self.imgs = imgs
+        
+        data_path = os.path.expanduser(os.path.expandvars(data_path))
         self.compressed = compressed
         self.compressed_encoding = compressed_encoding
         self.compressed_rvl = compressed_rvl
-        self.data_file = data_file
-        self.file_type = file_type
+        self.data_path = data_path
+        self.data_type = data_type
         self.interp = False
         self.bridge = cv_bridge.CvBridge()
         if t0 is not None:
@@ -69,25 +68,34 @@ class ImgData(RobotData):
             
         self.camera_params = CameraParams()
             
-    def _extract_bag_data(self, bag_file, topic, time_range=None):
+    @classmethod
+    def from_bag(cls, path, topic, time_range=None, time_tol=.1, causal=False, 
+                 t0=None, compressed=True, compressed_encoding='passthrough', compressed_rvl=False):
         """
-        Extracts pose data from ROS bag file. Assumes msg is of type PoseStamped.
+        Creates ImgData object from bag file
 
         Args:
-            bag_file (str): ROS bag file path
-            topic (str): ROS pose topic
+            path (str): ROS bag file path
+            topic (str): ROS image topic
             time_range (list, shape=(2,), optional): Two element list indicating range of times
                 that should be stored within object
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
+                no pose is available within tolerance, None is returned. Defaults to .1.
+            t0 (float, optional): Local time at the first msg. If not set, uses global time from 
+                the data_path. Defaults to None.
+            time_range (list, shape=(2,), optional): Two element list indicating range of times
+                (before being offset with t0) that should be stored within object
+            compressed (bool, optional): True if data_path contains compressed images
         """
         if time_range is not None:
             assert time_range[0] < time_range[1], "time_range must be given in incrementing order"
         
         times = []
         img_msgs = []
-        with AnyReader([Path(bag_file)]) as reader:
+        with AnyReader([Path(path)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
-                assert False, f"topic {topic} not found in bag file {bag_file}"
+                assert False, f"topic {topic} not found in bag file {path}"
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 if connection.topic != topic:
                     continue
@@ -101,8 +109,10 @@ class ImgData(RobotData):
                 times.append(t)
                 img_msgs.append(msg)
         
-        self.img_msgs = [msg for _, msg in sorted(zip(times, img_msgs), key=lambda zipped: zipped[0])]
-        self.set_times(np.array(sorted(times)))
+        img_msgs = [msg for _, msg in sorted(zip(times, img_msgs), key=lambda zipped: zipped[0])]
+        times = sorted(times)
+
+        return cls(times, img_msgs, path, 'bag', time_tol, causal, t0, compressed, compressed_encoding, compressed_rvl)
     
     def extract_params(self, topic, ):
         """
@@ -114,11 +124,11 @@ class ImgData(RobotData):
         Returns:
             np.array, shape=(3,3): camera intrinsic matrix K
         """
-        if self.file_type == 'bag' or self.file_type == 'bag2':
-            with AnyReader([Path(self.data_file)]) as reader:
+        if self.data_type == 'bag' or self.data_type == 'bag2':
+            with AnyReader([Path(self.data_path)]) as reader:
                 connections = [x for x in reader.connections if x.topic == topic]
                 if len(connections) == 0:
-                    assert False, f"topic {topic} not found in bag file {self.data_file}"
+                    assert False, f"topic {topic} not found in bag file {self.data_path}"
                 for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                     if connection.topic == topic:
                         msg = reader.deserialize(rawdata, connection.msgtype)
@@ -133,7 +143,7 @@ class ImgData(RobotData):
                         self.camera_params = CameraParams(K, D, width, height)
                         break
         else:
-            assert False, "file_type not supported, please choose from: bag"
+            assert False, "data_type not supported, please choose from: bag"
         return self.camera_params.K, self.camera_params.D
         
     def img(self, t):
@@ -150,15 +160,15 @@ class ImgData(RobotData):
         if idx is None:
             return None
         elif not self.compressed:
-            img = self.bridge.imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
+            img = self.bridge.imgmsg_to_cv2(self.imgs[idx], desired_encoding=self.compressed_encoding)
         elif self.compressed_rvl:
             from rvl import decompress_rvl
             assert self.width is not None and self.height is not None
             img = decompress_rvl(
-                np.array(self.img_msgs[idx].data[20:]).astype(np.int8), 
+                np.array(self.imgs[idx].data[20:]).astype(np.int8), 
                 self.height*self.width).reshape((self.height, self.width))
         else:
-            img = self.bridge.compressed_imgmsg_to_cv2(self.img_msgs[idx], desired_encoding=self.compressed_encoding)
+            img = self.bridge.compressed_imgmsg_to_cv2(self.imgs[idx], desired_encoding=self.compressed_encoding)
         return img
     
     def show(self, t, ax=None):

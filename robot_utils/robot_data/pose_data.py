@@ -9,67 +9,64 @@ import matplotlib.pyplot as plt
 
 from robot_utils.robot_data.robot_data import RobotData
 
-# TODO: maybe add a transform_pose function and a transform_by_pose function
-    
 class PoseData(RobotData):
     """
     Class for easy access to object poses over time
     """
     
-    def __init__(self, data_file, file_type, interp=False, causal=False, topic=None, time_tol=.1, t0=None, csv_options=None, T_recorded_body=None, T_premultiply=None, T_postmultiply=None): 
+    def __init__(self, times, positions, orientations, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None): 
         """
         Class for easy access to object poses over time
 
         Args:
-            data_file (str): File path to data
-            file_type (str): 'csv' or 'bag'
+            times (np.array, shape(n,)): times of the poses
+            positions (np.array, shape(n,3)): xyz positions of the poses
+            orientations (np.array, shape(n,4)): quaternions of the poses
             interp (bool): interpolate between closest times, else choose the closest time.
-            topic (str, optional): ROS topic, necessary only for bag file_type. Defaults to None.
             time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
                 no pose is available within tolerance, None is returned. Defaults to .1.
             t0 (float, optional): Local time at the first msg. If not set, uses global time from 
                 the data_file. Defaults to None.
-            csv_option (dict, optional): See _extract_csv_data for details. Defaults to None.
-            T_recorded_body (np.array, shape(4,4)): Rigid transform from body frame to the frame 
-                the data was recorded in. 
+            T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
+            T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
         """
         super().__init__(time_tol=time_tol, interp=interp, causal=causal)
-        data_file = os.path.expanduser(os.path.expandvars(data_file))
-        if file_type == 'csv':
-            self._extract_csv_data(data_file, csv_options)
-        elif file_type == 'bag':
-            self._extract_bag_data(data_file, topic)
-        else:
-            assert False, "file_type not supported, please choose from: csv or bag2"
+        self.set_times(np.array(times))
+        self.positions = np.array(positions)
+        self.orientations = np.array(orientations)
         if t0 is not None:
             self.set_t0(t0)
         self.T_premultiply = T_premultiply
         self.T_postmultiply = T_postmultiply
-        if T_recorded_body is not None:
-            assert self.T_postmultiply is None, "T_postmultiply not supported with T_recorded_body"
-            self.T_postmultiply = T_recorded_body
-        
     
-    def _extract_csv_data(self, csv_file, csv_options):
+    @classmethod
+    def from_csv(self, path, csv_options, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
         """
         Extracts pose data from csv file with 9 columns for time (sec/nanosec), position, and orientation
 
         Args:
-            csv_file (str): CSV file path
+            path (str): CSV file path
             csv_options (dict): Can include dict of structure: dict['col'], dict['col_nums'] which 
                 map to dicts containing keys of 'time', 'position', and 'orientation' and the 
                 corresponding column names and numbers. csv_options['timescale'] can be given if 
                 the time column is not in seconds.
+            interp (bool): interpolate between closest times, else choose the closest time.
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
+                no pose is available within tolerance, None is returned. Defaults to .1.
+            t0 (float, optional): Local time at the first msg. If not set, uses global time from 
+                the data_file. Defaults to None.
+            T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
+            T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
         """
         if csv_options is None:
-            pose_df = pd.read_csv(csv_file, usecols=['header.stamp.secs', 'header.stamp.nsecs', 'pose.position.x', 'pose.position.y', 'pose.position.z',
+            pose_df = pd.read_csv(path, usecols=['header.stamp.secs', 'header.stamp.nsecs', 'pose.position.x', 'pose.position.y', 'pose.position.z',
                 'pose.orientation.x', 'pose.orientation.y', 'pose.orientation.z', 'pose.orientation.w'])
             self.positions = pd.DataFrame.to_numpy(pose_df.iloc[:, 2:5])
             self.orientations = pd.DataFrame.to_numpy(pose_df.iloc[:, 5:9])
             self.set_times((pd.DataFrame.to_numpy(pose_df.iloc[:,0:1]) + pd.DataFrame.to_numpy(pose_df.iloc[:,1:2])*1e-9).reshape(-1))
         else:
             cols = csv_options['cols']
-            pose_df = pd.read_csv(csv_file, usecols=cols['time'] + cols['position'] + cols['orientation'])
+            pose_df = pd.read_csv(path, usecols=cols['time'] + cols['position'] + cols['orientation'])
             
             if 'col_nums' in csv_options:
                 t_cn = csv_options['col_nums']['time']
@@ -85,21 +82,33 @@ class PoseData(RobotData):
                 self.times *= csv_options['timescale']
         return
     
-    def _extract_bag_data(self, bag_file, topic):
+    @classmethod
+    def from_bag(cls, path, topic, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
         """
-        Extracts pose data from ROS bag file. Assumes msg is of type PoseStamped.
+        Create a PoseData object from a ROS bag file. Supports msg types PoseStamped and Odometry.
 
         Args:
-            bag_file (str): ROS bag file path
+            path (str): ROS bag file path
             topic (str): ROS pose topic
+            interp (bool): interpolate between closest times, else choose the closest time.
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
+                no pose is available within tolerance, None is returned. Defaults to .1.
+            t0 (float, optional): Local time at the first msg. If not set, uses global time from 
+                the data_file. Defaults to None.
+            T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
+            T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
+
+        Returns:
+            PoseData: PoseData object
         """
+        path = os.path.expanduser(os.path.expandvars(path))
         times = []
         positions = []
         orientations = []
-        with AnyReader([Path(bag_file)]) as reader:
+        with AnyReader([Path(path)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
-                assert False, f"topic {topic} not found in bag file {bag_file}"
+                assert False, f"topic {topic} not found in bag file {path}"
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 times.append(msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9)
@@ -111,9 +120,9 @@ class PoseData(RobotData):
                     assert False, "invalid msg type (not PoseStamped or Odometry)"
                 positions.append([pose.position.x, pose.position.y, pose.position.z])
                 orientations.append([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
-        self.set_times(np.array(times))
-        self.positions = np.array(positions)
-        self.orientations = np.array(orientations)
+
+        return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol, 
+                   t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
 
     def position(self, t):
         """
