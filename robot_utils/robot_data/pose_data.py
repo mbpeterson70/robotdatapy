@@ -40,7 +40,7 @@ class PoseData(RobotData):
         self.T_postmultiply = T_postmultiply
     
     @classmethod
-    def from_csv(self, path, csv_options, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
+    def from_csv(cls, path, csv_options, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
         """
         Extracts pose data from csv file with 9 columns for time (sec/nanosec), position, and orientation
 
@@ -58,12 +58,13 @@ class PoseData(RobotData):
             T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
         """
+        path = os.path.expanduser(os.path.expandvars(path))
         if csv_options is None:
             pose_df = pd.read_csv(path, usecols=['header.stamp.secs', 'header.stamp.nsecs', 'pose.position.x', 'pose.position.y', 'pose.position.z',
                 'pose.orientation.x', 'pose.orientation.y', 'pose.orientation.z', 'pose.orientation.w'])
-            self.positions = pd.DataFrame.to_numpy(pose_df.iloc[:, 2:5])
-            self.orientations = pd.DataFrame.to_numpy(pose_df.iloc[:, 5:9])
-            self.set_times((pd.DataFrame.to_numpy(pose_df.iloc[:,0:1]) + pd.DataFrame.to_numpy(pose_df.iloc[:,1:2])*1e-9).reshape(-1))
+            positions = pd.DataFrame.to_numpy(pose_df.iloc[:, 2:5])
+            orientations = pd.DataFrame.to_numpy(pose_df.iloc[:, 5:9])
+            times = (pd.DataFrame.to_numpy(pose_df.iloc[:,0:1]) + pd.DataFrame.to_numpy(pose_df.iloc[:,1:2])*1e-9).reshape(-1)
         else:
             cols = csv_options['cols']
             pose_df = pd.read_csv(path, usecols=cols['time'] + cols['position'] + cols['orientation'])
@@ -74,13 +75,15 @@ class PoseData(RobotData):
                 ori_cn = csv_options['col_nums']['orientation']
             else:
                 t_cn, pos_cn, ori_cn = [0], [1,2,3], [4,5,6,7]
-            self.positions = pd.DataFrame.to_numpy(pose_df.iloc[:, pos_cn])
-            self.orientations = pd.DataFrame.to_numpy(pose_df.iloc[:, ori_cn])
-            self.set_times(pd.DataFrame.to_numpy(pose_df.iloc[:,t_cn]).astype(np.float64).reshape(-1))
+            positions = pd.DataFrame.to_numpy(pose_df.iloc[:, pos_cn])
+            orientations = pd.DataFrame.to_numpy(pose_df.iloc[:, ori_cn])
+            times = pd.DataFrame.to_numpy(pose_df.iloc[:,t_cn]).astype(np.float64).reshape(-1)
 
-            if 'timescale' in csv_options:
-                self.times *= csv_options['timescale']
-        return
+        if 'timescale' in csv_options:
+            times *= csv_options['timescale']
+
+        return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol,
+                   t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
     
     @classmethod
     def from_bag(cls, path, topic, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
