@@ -8,20 +8,39 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pykitti
 from robot_utils.robot_data.robot_data import RobotData
+<<<<<<< HEAD
 
+=======
+import cv2
+# TODO: maybe add a transform_pose function and a transform_by_pose function
+    
+>>>>>>> b4abad7ab4973e680726daa481b4c659350a339d
 class PoseData(RobotData):
     """
     Class for easy access to object poses over time
     """
     
+<<<<<<< HEAD
     def __init__(self, times, positions, orientations, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None): 
+=======
+    def __init__(self, data_file, file_type, 
+                 kitti_sequence='00',
+                 interp=False, causal=False, topic=None, 
+                 time_tol=.1, t0=None, csv_options=None, 
+                 T_recorded_body=None, T_premultiply=None, T_postmultiply=None): 
+>>>>>>> b4abad7ab4973e680726daa481b4c659350a339d
         """
         Class for easy access to object poses over time
 
         Args:
+<<<<<<< HEAD
             times (np.array, shape(n,)): times of the poses
             positions (np.array, shape(n,3)): xyz positions of the poses
             orientations (np.array, shape(n,4)): quaternions of the poses
+=======
+            data_file (str): File path to data
+            file_type (str): 'csv' or 'bag' or 'kitti'
+>>>>>>> b4abad7ab4973e680726daa481b4c659350a339d
             interp (bool): interpolate between closest times, else choose the closest time.
             time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
                 no pose is available within tolerance, None is returned. Defaults to .1.
@@ -31,13 +50,41 @@ class PoseData(RobotData):
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
         """
         super().__init__(time_tol=time_tol, interp=interp, causal=causal)
+<<<<<<< HEAD
         self.set_times(np.array(times))
         self.positions = np.array(positions)
         self.orientations = np.array(orientations)
+=======
+        data_file = os.path.expanduser(os.path.expandvars(data_file))
+        if file_type == 'csv':
+            self._extract_csv_data(data_file, csv_options)
+        elif file_type == 'bag':
+            self._extract_bag_data(data_file, topic)
+        elif file_type == 'kitti':
+            self.dataset = pykitti.odometry(data_file, kitti_sequence)
+            self.poses = np.asarray(self.dataset.poses)
+            self.positions = self.poses[:, 0:3, -1]
+            self.orientations = np.asarray([Rot.as_quat(Rot.from_matrix(self.poses[i, :3, :3])) for i in range(self.poses.shape[0])])
+            self.times = np.asarray([d.total_seconds() for d in self.dataset.timestamps])
+            P2 = self.dataset.calib.P_rect_20.reshape((3, 4)) # Left RGB camera
+            k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)
+            T_recorded_body = np.vstack([np.hstack([r, t[:3]]), np.asarray([0, 0, 0, 1])])
+        else:
+            assert False, "file_type not supported, please choose from: csv or bag2"
+>>>>>>> b4abad7ab4973e680726daa481b4c659350a339d
         if t0 is not None:
             self.set_t0(t0)
         self.T_premultiply = T_premultiply
         self.T_postmultiply = T_postmultiply
+<<<<<<< HEAD
+=======
+        self.file_type = file_type
+
+        if T_recorded_body is not None:
+            assert self.T_postmultiply is None, "T_postmultiply not supported with T_recorded_body"
+            self.T_postmultiply = T_recorded_body
+        
+>>>>>>> b4abad7ab4973e680726daa481b4c659350a339d
     
     @classmethod
     def from_csv(cls, path, csv_options, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
