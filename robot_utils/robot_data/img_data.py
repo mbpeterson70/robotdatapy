@@ -83,8 +83,9 @@ class ImgData(RobotData):
             self.times = np.asarray([d.total_seconds() for d in self.dataset.timestamps])
         elif file_type == 'kitti' and kitti_type == 'depth':
             self.kitti_type = kitti_type
-            dataset = pykitti.odometry(data_file, kitti_sequence)
-            self.times = np.asarray([d.total_seconds() for d in dataset.timestamps])
+            self.dataset = pykitti.odometry(data_file, kitti_sequence)
+            # self.P2 = dataset.calib.P_rect_20.reshape((3, 4))
+            self.times = np.asarray([d.total_seconds() for d in self.dataset.timestamps])
         else:
             assert False, "file_type not supported, please choose from: bag, kitti"
 
@@ -188,7 +189,8 @@ class ImgData(RobotData):
                         self.camera_params = CameraParams(K, D, width, height)
                         break
         elif self.file_type == 'kitti':
-            P2 = self.dataset.calib.loc['P2:'].reshape((3, 4)) # Left RGB camera
+            # P2 = self.dataset.calib.loc['P2:'].reshape((3, 4)) # Left RGB camera
+            P2 = self.dataset.calib.P_rect_20.reshape((3, 4))
             k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)
             self.camera_params = CameraParams(k, np.zeros(4), 1241, 376) # Hard coding for now.... TODO: improve this
         else:

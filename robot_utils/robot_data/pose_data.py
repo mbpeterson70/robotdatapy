@@ -11,6 +11,7 @@ from robot_utils.robot_data.robot_data import RobotData
 <<<<<<< HEAD
 
 =======
+from robot_utils.transform import transform, T_RDFFLU, T_FLURDF
 import cv2
 # TODO: maybe add a transform_pose function and a transform_by_pose function
     
@@ -69,6 +70,7 @@ class PoseData(RobotData):
             P2 = self.dataset.calib.P_rect_20.reshape((3, 4)) # Left RGB camera
             k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)
             T_recorded_body = np.vstack([np.hstack([r, t[:3]]), np.asarray([0, 0, 0, 1])])
+            T_premultiply = T_FLURDF
         else:
             assert False, "file_type not supported, please choose from: csv or bag2"
 >>>>>>> b4abad7ab4973e680726daa481b4c659350a339d
