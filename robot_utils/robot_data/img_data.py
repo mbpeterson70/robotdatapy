@@ -35,9 +35,7 @@ class ImgData(RobotData):
             t0=None, 
             compressed=True,
             compressed_encoding='passthrough',
-            compressed_rvl=False,
-            kitti_type=None,
-            kitti_depth_img_path=None
+            compressed_rvl=False
         ): 
         """
         Class for easy access to image data over time
@@ -65,8 +63,6 @@ class ImgData(RobotData):
         self.compressed_rvl = compressed_rvl
         self.data_path = data_path
         self.data_type = data_type
-        self.kitti_type = kitti_type
-        self.kitti_depth_img_path = kitti_depth_img_path
         self.interp = False
         self.bridge = cv_bridge.CvBridge()
         if t0 is not None:
@@ -151,11 +147,12 @@ class ImgData(RobotData):
             dataset = pykitti.odometry(data_file, kitti_sequence)
             times = np.asarray([d.total_seconds() for d in dataset.timestamps])
 
-        return cls(times, dataset, path, 'kitti', time_tol, causal, t0, compressed, compressed_encoding, compressed_rvl, 
-                   kitti_type=kitti_type,
-                   kitti_depth_img_path= data_file + '/sequences/' + kitti_sequence  + '/depth/')
-
-    def extract_params(self, topic, ):
+        img_data = cls(times, dataset, path, 'kitti', time_tol, causal, t0, compressed, compressed_encoding, compressed_rvl)
+        img_data.kitti_type = kitti_type
+        img_data.kitti_depth_img_path = data_file + '/sequences/' + kitti_sequence  + '/depth/'
+        return img_data
+    
+    def extract_params(self, topic=None):
         """
         Get camera parameters
 
@@ -166,6 +163,7 @@ class ImgData(RobotData):
             np.array, shape=(3,3): camera intrinsic matrix K
         """
         if self.data_type == 'bag' or self.data_type == 'bag2':
+            assert topic, "Topic name should be provided when using rosbag."
             with AnyReader([Path(self.data_path)]) as reader:
                 connections = [x for x in reader.connections if x.topic == topic]
                 if len(connections) == 0:
@@ -184,11 +182,11 @@ class ImgData(RobotData):
                         self.camera_params = CameraParams(K, D, width, height)
                         break
         elif self.data_type == 'kitti':
-            P2 = self.dataset.calib.P_rect_20.reshape((3, 4))
+            P2 = self.imgs.calib.P_rect_20.reshape((3, 4))
             k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)
             self.camera_params = CameraParams(k, np.zeros(4), 1241, 376) # Hard coding for now.... TODO: improve this
         else:
-            assert False, "data_type not supported, please choose from: bag"
+            assert False, "data_type not supported, please choose from: bag, bag2, kitti"
         return self.camera_params.K, self.camera_params.D
         
     def img(self, t):
