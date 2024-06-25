@@ -41,6 +41,41 @@ def transform_2_xytheta(T):
     psi = Rot.from_matrix(T[:3,:3]).as_euler('xyz', degrees=False)[2]
     return x, y, psi
 
+def transform_2_xyzrpy(T, degrees=False):
+    """
+    Converts a 4x4 rigid body transformation matrix to a 6D vector of x, y, z, roll, pitch, yaw
+
+    Args:
+        T (np.array, shape=(4,4)): Rigid body transformation matrix
+        degrees (bool, optional): Report roll, pitch, and yaw in degrees rather than radians. Defaults to False.
+
+    Returns:
+        np.array, shape=(6,): 6 dimensional vector of x, y, z, roll, pitch, yaw
+    """
+    assert T.shape[0] == T.shape[1], "T must be square"
+    assert T.shape[0] == 4
+    xyzrpy = np.zeros(6)
+    xyzrpy[:3] = T[:3,3]
+    xyzrpy[3:] = Rot.from_matrix(T[:3,:3]).as_euler('ZYX', degrees=degrees)
+    return xyzrpy
+
+def transform_2_xyz_quat(T):
+    """
+    Converts a 4x4 rigid body transformation matrix to a 6D vector of x, y, z, and quaternion (x, y, z, w)
+
+    Args:
+        T (np.array, shape=(4,4)): Rigid body transformation matrix
+
+    Returns:
+        np.array, shape=(7,): 7 dimensional vector of x, y, z, qx, qy, qz, qw
+    """
+    assert T.shape[0] == T.shape[1], "T must be square"
+    assert T.shape[0] == 4
+    xyz_quat = np.zeros(7)
+    xyz_quat[:3] = T[:3,3]
+    xyz_quat[3:] = Rot.from_matrix(T[:3,:3]).as_quat()
+    return xyz_quat
+
 def xytheta_2_transform(x, y, psi, degrees=False, dim=3):
     assert dim == 3 or dim == 2, "supports dimension 2 or 3 only"
     T = np.eye(dim + 1)
