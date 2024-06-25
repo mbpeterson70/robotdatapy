@@ -338,16 +338,7 @@ class PoseData(RobotData):
         Returns:
             np.array, shape(4,4): static transform
         """
-        tf_tree = {}
-        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))]) as reader:
-            connections = [x for x in reader.connections if x.topic == '/tf_static']
-            if len(connections) == 0:
-                assert False, f"topic /tf_static not found in bag file {path}"
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
-                msg = reader.deserialize(rawdata, connection.msgtype)
-                if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
-                    for transform_msg in msg.transforms:
-                        tf_tree[transform_msg.child_frame_id] = (transform_msg.header.frame_id, transform_msg.transform)
+        tf_tree = cls.static_tf_dict_from_bag(path)
                         
         if child_frame not in tf_tree:
             assert False, f"child_frame {child_frame} not found in bag file {path}"
@@ -376,3 +367,26 @@ class PoseData(RobotData):
             T = T @ Ti
         
         return T
+    
+    @classmethod
+    def static_tf_dict_from_bag(cls, path: str):
+        """Returns a dictionary of static transforms from a ROS bag file. The dictionary maps 
+        child_frame_id to a tuple of (parent_frame_id, transform_msg).
+
+        Args:
+            path (str): Path to ROS bag.
+
+        Returns:
+            dict: Static transform dictionary
+        """
+        tf_tree = {}
+        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))]) as reader:
+            connections = [x for x in reader.connections if x.topic == '/tf_static']
+            if len(connections) == 0:
+                assert False, f"topic /tf_static not found in bag file {path}"
+            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+                msg = reader.deserialize(rawdata, connection.msgtype)
+                if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
+                    for transform_msg in msg.transforms:
+                        tf_tree[transform_msg.child_frame_id] = (transform_msg.header.frame_id, transform_msg.transform)
+        return tf_tree
