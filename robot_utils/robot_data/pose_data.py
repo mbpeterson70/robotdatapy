@@ -6,9 +6,9 @@ import os
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 import matplotlib.pyplot as plt
-
+import pykitti
 from robot_utils.robot_data.robot_data import RobotData
-
+import cv2
 class PoseData(RobotData):
     """
     Class for easy access to object poses over time
@@ -127,6 +127,41 @@ class PoseData(RobotData):
         return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol, 
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
 
+
+    @classmethod
+    def from_kitti(cls, path, kitti_sequence='00', interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
+        """
+        Create a PoseData object from a ROS bag file. Supports msg types PoseStamped and Odometry.
+
+        Args:
+            path (str): Path to directory that contains KITTI data.
+            kitti_sequence (str): The KITTI sequence to use.
+            interp (bool): interpolate between closest times, else choose the closest time.
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
+                no pose is available within tolerance, None is returned. Defaults to .1.
+            t0 (float, optional): Local time at the first msg. If not set, uses global time from 
+                the data_file. Defaults to None.
+            T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
+            T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
+
+        Returns:
+            PoseData: PoseData object
+        """
+        data_file = os.path.expanduser(os.path.expandvars(path))
+        dataset = pykitti.odometry(data_file, kitti_sequence)
+        poses = np.asarray(dataset.poses)
+        positions = poses[:, 0:3, -1]
+        orientations = np.asarray([Rot.as_quat(Rot.from_matrix(poses[i, :3, :3])) for i in range(poses.shape[0])])
+        times = np.asarray([d.total_seconds() for d in dataset.timestamps])
+        P2 = dataset.calib.P_rect_20.reshape((3, 4)) # Left RGB camera
+        k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)
+        T_recorded_body = np.vstack([np.hstack([r, t[:3]]), np.asarray([0, 0, 0, 1])])
+        T_postmultiply = T_recorded_body
+
+        return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol, 
+                   t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
+
+
     def position(self, t):
         """
         Position at time t.
@@ -236,7 +271,6 @@ class PoseData(RobotData):
         self.positions = self.positions[idx0:idxf]
         self.orientations = self.orientations[idx0:idxf]
 
-    # def plot2d(self, ax=None, dt=.1, t0=None, tf=None, axes='xy'):
     def plot2d(self, ax=None, dt=.1, t=None, t0=None, tf=None, axes='xy', pose=False, trajectory=True, axis_len=1.0):
         """
         Plots the position data in 2D

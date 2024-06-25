@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 
 from robot_utils.robot_data.robot_data import RobotData
+import cv2
+import pykitti
 from robot_utils.exceptions import MsgNotFound
 from robot_utils.camera import CameraParams
 # TODO: support non-rvl compressed depth images
@@ -33,7 +35,7 @@ class ImgData(RobotData):
             t0=None, 
             compressed=True,
             compressed_encoding='passthrough',
-            compressed_rvl=False,
+            compressed_rvl=False
         ): 
         """
         Class for easy access to image data over time
@@ -113,8 +115,44 @@ class ImgData(RobotData):
         times = sorted(times)
 
         return cls(times, img_msgs, path, 'bag', time_tol, causal, t0, compressed, compressed_encoding, compressed_rvl)
+
+
+    @classmethod
+    def from_kitti(cls, path, kitti_type, kitti_sequence='00', time_range=None, time_tol=.1, causal=False, 
+                 t0=None, compressed=True, compressed_encoding='passthrough', compressed_rvl=False):
+        """
+        Creates ImgData object from bag file
+
+        Args:
+            path (str): Path to directory that contains KITTI data.
+            kitti_sequence (str): The KITTI sequence to use.
+            kitti_type (str): 'rgb' or 'depth'
+            time_range (list, shape=(2,), optional): Two element list indicating range of times
+                that should be stored within object
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
+                no pose is available within tolerance, None is returned. Defaults to .1.
+            t0 (float, optional): Local time at the first msg. If not set, uses global time from 
+                the data_path. Defaults to None.
+            time_range (list, shape=(2,), optional): Two element list indicating range of times
+                (before being offset with t0) that should be stored within object
+            compressed (bool, optional): True if data_path contains compressed images
+        """
+        assert kitti_type == 'rgb' or kitti_type == 'depth'
+        data_file = os.path.expanduser(os.path.expandvars(path))
+
+        if kitti_type == 'rgb':
+            dataset = pykitti.odometry(data_file, kitti_sequence)
+            times = np.asarray([d.total_seconds() for d in dataset.timestamps])
+        elif kitti_type == 'depth':
+            dataset = pykitti.odometry(data_file, kitti_sequence)
+            times = np.asarray([d.total_seconds() for d in dataset.timestamps])
+
+        img_data = cls(times, dataset, path, 'kitti', time_tol, causal, t0, compressed, compressed_encoding, compressed_rvl)
+        img_data.kitti_type = kitti_type
+        img_data.kitti_depth_img_path = data_file + '/sequences/' + kitti_sequence  + '/depth/'
+        return img_data
     
-    def extract_params(self, topic, ):
+    def extract_params(self, topic=None):
         """
         Get camera parameters
 
@@ -125,6 +163,7 @@ class ImgData(RobotData):
             np.array, shape=(3,3): camera intrinsic matrix K
         """
         if self.data_type == 'bag' or self.data_type == 'bag2':
+            assert topic, "Topic name should be provided when using rosbag."
             with AnyReader([Path(self.data_path)]) as reader:
                 connections = [x for x in reader.connections if x.topic == topic]
                 if len(connections) == 0:
@@ -142,8 +181,12 @@ class ImgData(RobotData):
                         height = msg.height
                         self.camera_params = CameraParams(K, D, width, height)
                         break
+        elif self.data_type == 'kitti':
+            P2 = self.imgs.calib.P_rect_20.reshape((3, 4))
+            k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)
+            self.camera_params = CameraParams(k, np.zeros(4), 1241, 376) # Hard coding for now.... TODO: improve this
         else:
-            assert False, "data_type not supported, please choose from: bag"
+            assert False, "data_type not supported, please choose from: bag, bag2, kitti"
         return self.camera_params.K, self.camera_params.D
         
     def img(self, t):
@@ -157,19 +200,31 @@ class ImgData(RobotData):
             cv image
         """
         idx = self.idx(t)
-        if idx is None:
-            return None
-        elif not self.compressed:
-            img = self.bridge.imgmsg_to_cv2(self.imgs[idx], desired_encoding=self.compressed_encoding)
-        elif self.compressed_rvl:
-            from rvl import decompress_rvl
-            assert self.width is not None and self.height is not None
-            img = decompress_rvl(
-                np.array(self.imgs[idx].data[20:]).astype(np.int8), 
-                self.height*self.width).reshape((self.height, self.width))
-        else:
-            img = self.bridge.compressed_imgmsg_to_cv2(self.imgs[idx], desired_encoding=self.compressed_encoding)
+        if self.data_type == 'bag' or self.data_type == 'bag2':
+            if idx is None:
+                return None
+            elif not self.compressed:
+                img = self.bridge.imgmsg_to_cv2(self.imgs[idx], desired_encoding=self.compressed_encoding)
+            elif self.compressed_rvl:
+                from rvl import decompress_rvl
+                assert self.width is not None and self.height is not None
+                img = decompress_rvl(
+                    np.array(self.imgs[idx].data[20:]).astype(np.int8), 
+                    self.height*self.width).reshape((self.height, self.width))
+            else:
+                img = self.bridge.compressed_imgmsg_to_cv2(self.imgs[idx], desired_encoding=self.compressed_encoding)
+                
+        elif self.data_type == 'kitti' and self.kitti_type == 'rgb':
+            pil_image = self.imgs.get_cam2(idx)
+            img = np.array(pil_image)
+            # Convert RGB to BGR
+            img = img[:, :, ::-1].copy()
+
+        elif self.data_type == 'kitti' and self.kitti_type == 'depth':
+            # img = np.load(self.data_file + '/sequences/' + self.kitti_sequence  + '/depth/' + str(idx).zfill(6) + '.npy')
+            img = np.load(self.kitti_depth_img_path + str(idx).zfill(6) + '.npy')
         return img
+
     
     def show(self, t, ax=None):
         """
