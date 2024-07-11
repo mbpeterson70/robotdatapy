@@ -7,8 +7,10 @@ from rosbags.highlevel import AnyReader
 from pathlib import Path
 import matplotlib.pyplot as plt
 import pykitti
-from robot_utils.robot_data.robot_data import RobotData
 import cv2
+
+from robotdatapy.data.robot_data import RobotData
+
 class PoseData(RobotData):
     """
     Class for easy access to object poses over time

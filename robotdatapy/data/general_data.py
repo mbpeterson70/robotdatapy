@@ -5,7 +5,7 @@ from pathlib import Path
 from copy import deepcopy
 import os
 
-from robot_utils.robot_data.robot_data import RobotData
+from robotdatapy.data.robot_data import RobotData
     
 class GeneralData(RobotData):
     """

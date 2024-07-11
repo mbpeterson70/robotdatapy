@@ -5,11 +5,11 @@ from pathlib import Path
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
 
-from robot_utils.robot_data.robot_data import RobotData
+from robotdatapy.data.robot_data import RobotData
 import cv2
 import pykitti
-from robot_utils.exceptions import MsgNotFound
-from robot_utils.camera import CameraParams
+from robotdatapy.camera import CameraParams
+from robotdatapy.exceptions import MsgNotFound
 # TODO: support non-rvl compressed depth images
 
 # ROS dependencies

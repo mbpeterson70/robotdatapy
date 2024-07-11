@@ -3,7 +3,7 @@ import numpy as np
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 
-from robot_utils.exceptions import NoDataNearTimeException
+from robotdatapy.exceptions import NoDataNearTimeException
 
 class RobotData():
     """
