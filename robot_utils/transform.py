@@ -56,7 +56,7 @@ def transform_2_xyzrpy(T, degrees=False):
     assert T.shape[0] == 4
     xyzrpy = np.zeros(6)
     xyzrpy[:3] = T[:3,3]
-    xyzrpy[3:] = Rot.from_matrix(T[:3,:3]).as_euler('ZYX', degrees=degrees)
+    xyzrpy[3:] = Rot.from_matrix(T[:3,:3]).as_euler('ZYX', degrees=degrees)[::-1]
     return xyzrpy
 
 def transform_2_xyz_quat(T):

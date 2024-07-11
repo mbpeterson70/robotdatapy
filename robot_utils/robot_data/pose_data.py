@@ -126,7 +126,22 @@ class PoseData(RobotData):
 
         return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol, 
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
+        
+    @classmethod
+    def from_times_and_poses(cls, times, poses, **kwargs):
+        """
+        Create a PoseData object from times and poses.
 
+        Args:
+            times (np.array, shape(n,)): times of the poses
+            poses (np.array, shape(n,4,4)): poses as rigid body transforms
+            
+        Returns:
+            PoseData: PoseData object
+        """
+        positions = np.array([pose[:3,3] for pose in poses])
+        orientations = np.array([Rot.as_quat(Rot.from_matrix(pose[:3,:3])) for pose in poses])
+        return cls(times, positions, orientations, **kwargs)
 
     @classmethod
     def from_kitti(cls, path, kitti_sequence='00', interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
@@ -257,6 +272,18 @@ class PoseData(RobotData):
             T_WB = T_WB @ self.T_postmultiply
         return T_WB
     
+    def pose(self, t):
+        """
+        Pose at time t.
+
+        Args:
+            t (float): time
+
+        Returns:
+            np.array, shape(4,4): Rigid body transform
+        """
+        return self.T_WB(t)     
+    
     def clip(self, t0, tf):
         """
         Clips the data to be between t0 and tf
@@ -304,12 +331,15 @@ class PoseData(RobotData):
             else:
                 assert False, "axes must be a string of x, y, or z"
 
-        if t is None and trajectory:
-            positions = np.array([self.position(t) for t in np.arange(t0, tf, dt)])
+        if trajectory:
+            if t is None:
+                positions = np.array([self.position(ti) for ti in np.arange(t0, tf, dt)])
+            else:
+                positions = np.array([self.position(ti) for ti in t])
             ax.plot(positions[:,ax_idx[0]], positions[:,ax_idx[1]])
         if t is not None or pose:
             if t is not None:
-                t = [t]
+                t = t #[t]
             else:
                 t = np.arange(t0, tf, dt)
             for ti in t:
