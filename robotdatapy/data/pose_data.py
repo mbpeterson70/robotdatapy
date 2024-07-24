@@ -16,7 +16,7 @@ class PoseData(RobotData):
     Class for easy access to object poses over time
     """
     
-    def __init__(self, times, positions, orientations, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None): 
+    def __init__(self, times, positions, orientations, interp=True, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None): 
         """
         Class for easy access to object poses over time
 
@@ -42,7 +42,7 @@ class PoseData(RobotData):
         self.T_postmultiply = T_postmultiply
     
     @classmethod
-    def from_csv(cls, path, csv_options, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
+    def from_csv(cls, path, csv_options, interp=True, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
         """
         Extracts pose data from csv file with 9 columns for time (sec/nanosec), position, and orientation
 
@@ -88,7 +88,7 @@ class PoseData(RobotData):
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
     
     @classmethod
-    def from_bag(cls, path, topic, interp=False, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
+    def from_bag(cls, path, topic, interp=True, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
         """
         Create a PoseData object from a ROS bag file. Supports msg types PoseStamped and Odometry.
 
