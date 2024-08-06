@@ -300,7 +300,7 @@ class PoseData(RobotData):
         self.positions = self.positions[idx0:idxf]
         self.orientations = self.orientations[idx0:idxf]
 
-    def plot2d(self, ax=None, dt=.1, t=None, t0=None, tf=None, axes='xy', pose=False, trajectory=True, axis_len=1.0):
+    def plot2d(self, ax=None, dt=.1, t=None, t0=None, tf=None, axes='xy', pose=False, trajectory=True, axis_len=1.0, **kwargs):
         """
         Plots the position data in 2D
 
@@ -338,7 +338,7 @@ class PoseData(RobotData):
                 positions = np.array([self.position(ti) for ti in np.arange(t0, tf, dt)])
             else:
                 positions = np.array([self.position(ti) for ti in t])
-            ax.plot(positions[:,ax_idx[0]], positions[:,ax_idx[1]])
+            ax.plot(positions[:,ax_idx[0]], positions[:,ax_idx[1]], **kwargs)
         if t is not None or pose:
             if t is not None:
                 t = t #[t]
@@ -352,7 +352,7 @@ class PoseData(RobotData):
             
         ax.set_xlabel(axes[0])
         ax.set_ylabel(axes[1])
-        ax.axis('equal')
+        ax.set_aspect('equal')
         ax.grid(True)
         return ax
     
