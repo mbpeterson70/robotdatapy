@@ -32,7 +32,7 @@ def T_mag(T, deg2m):
     t_mag = np.linalg.norm(t)
     return np.abs(rot_mag) + np.abs(t_mag)
 
-def transform_2_xytheta(T):
+def transform_to_xytheta(T):
     dim = T.shape[1] - 1
     if dim == 2:
         T = T2d_2_T3d(T)
@@ -41,7 +41,7 @@ def transform_2_xytheta(T):
     psi = Rot.from_matrix(T[:3,:3]).as_euler('xyz', degrees=False)[2]
     return x, y, psi
 
-def transform_2_xyzrpy(T, degrees=False):
+def transform_to_xyzrpy(T, degrees=False):
     """
     Converts a 4x4 rigid body transformation matrix to a 6D vector of x, y, z, roll, pitch, yaw
 
@@ -59,12 +59,14 @@ def transform_2_xyzrpy(T, degrees=False):
     xyzrpy[3:] = Rot.from_matrix(T[:3,:3]).as_euler('ZYX', degrees=degrees)[::-1]
     return xyzrpy
 
-def transform_2_xyz_quat(T):
+def transform_to_xyz_quat(T, separate=False):
     """
     Converts a 4x4 rigid body transformation matrix to a 6D vector of x, y, z, and quaternion (x, y, z, w)
 
     Args:
         T (np.array, shape=(4,4)): Rigid body transformation matrix
+        separate (bool, optional): Return translation and quaternion as two separate arrays. 
+            Defaults to False.
 
     Returns:
         np.array, shape=(7,): 7 dimensional vector of x, y, z, qx, qy, qz, qw
@@ -74,9 +76,12 @@ def transform_2_xyz_quat(T):
     xyz_quat = np.zeros(7)
     xyz_quat[:3] = T[:3,3]
     xyz_quat[3:] = Rot.from_matrix(T[:3,:3]).as_quat()
-    return xyz_quat
+    if separate:
+        return xyz_quat[:3], xyz_quat[3:]
+    else:
+        return xyz_quat
 
-def xytheta_2_transform(x, y, psi, degrees=False, dim=3):
+def xytheta_to_transform(x, y, psi, degrees=False, dim=3):
     assert dim == 3 or dim == 2, "supports dimension 2 or 3 only"
     T = np.eye(dim + 1)
     T[:2,:2] = Rot.from_euler('xyz', [0, 0, psi], degrees=degrees).as_matrix()[:2,:2]
@@ -84,13 +89,18 @@ def xytheta_2_transform(x, y, psi, degrees=False, dim=3):
     T[1,dim] = y
     return T
 
-def pos_quat_to_transform(pos, quat):
+def xyz_quat_to_transform(xyz, quat):
+    xyz = np.array(xyz)
+    quat = np.array(quat)
     T = np.eye(4)
     T[:3,:3] = Rot.from_quat(quat).as_matrix()
-    T[:3,3] = pos.reshape(-1)
+    T[:3,3] = xyz.reshape(-1)
     return T
 
 def T3d_2_T2d(T3d):
+    print("The function T3d_2_T2d is deprecated. " + 
+          "Does not handle 3D to 2D conversion properly " +
+          "(when roll and pitch are involved).")
     T2d = np.delete(np.delete(T3d, 2, axis=0), 2, axis=1)
     return T2d
 
