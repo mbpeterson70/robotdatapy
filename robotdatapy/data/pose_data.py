@@ -88,6 +88,32 @@ class PoseData(RobotData):
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
     
     @classmethod
+    def from_kmd_gt_csv(cls, path, **kwargs):
+        """
+        Extracts pose data from a Kimera-Multi Data ground truth csv file. 
+        The csv file should have columns 
+        '#timestamp_kf', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'.
+
+        Args:
+            path (str): CSV file path
+            kwargs: Additional arguments to pass to from_csv
+        """
+        csv_options = {
+            'cols': {
+                'time': ["#timestamp_kf"],
+                'position': ['x', 'y', 'z'],
+                'orientation': ['qw', 'qx', 'qy', 'qz']
+            },
+            'col_nums': {
+                'time': [0],
+                'position': [1, 2, 3],
+                'orientation': [5, 6, 7, 4]
+            },
+            'timescale': 1e-9
+        }
+        return cls.from_csv(path, csv_options, **kwargs)
+    
+    @classmethod
     def from_bag(cls, path, topic, interp=True, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
         """
         Create a PoseData object from a ROS bag file. Supports msg types PoseStamped and Odometry.
@@ -339,7 +365,7 @@ class PoseData(RobotData):
             else:
                 positions = np.array([self.position(ti) for ti in t])
             ax.plot(positions[:,ax_idx[0]], positions[:,ax_idx[1]], **kwargs)
-        if t is not None or pose:
+        if pose:
             if t is not None:
                 t = t #[t]
             else:
