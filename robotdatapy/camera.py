@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 
-from robot_utils.exceptions import MsgNotFound
+from robotdatapy.exceptions import MsgNotFound
 
 def pixel_depth_2_xyz(x, y, depth, K):
     """

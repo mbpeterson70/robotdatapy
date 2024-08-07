@@ -43,7 +43,7 @@ def circle_intersection(
         
     d = np.linalg.norm(circle1.center - circle2.center)
     if d <= np.abs(circle1.radius - circle2.radius): # one circle is inside the other
-        return np.pi * np.min([circle1.radius, circle2.radius])
+        return np.pi * np.min([circle1.radius, circle2.radius])**2
     elif d >= circle1.radius + circle2.radius: # circles do not intersect
         return 0.
     r1 = circle1.radius

@@ -1,4 +1,4 @@
-# robot_utils
+# robotdatapy
 
 This is a collection of Python classes and functions to make working with robots easier.
 

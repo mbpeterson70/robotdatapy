@@ -1,5 +1,5 @@
 import numpy as np
-from robot_utils.robot_data.robot_data import RobotData
+from robotdatapy.data.robot_data import RobotData
     
 class ArrayData(RobotData):
     """
