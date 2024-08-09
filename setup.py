@@ -13,7 +13,8 @@ setup(
                         'scipy',
                         'pandas',
                         'rosbags',
-                        'pykitti'
+                        'pykitti',
+                        'evo'
                       ],
 
 )

@@ -8,6 +8,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pykitti
 import cv2
+import evo
 
 from robotdatapy.data.robot_data import RobotData
 
@@ -381,6 +382,18 @@ class PoseData(RobotData):
         ax.set_aspect('equal')
         ax.grid(True)
         return ax
+    
+    def to_evo(self):
+        """
+        Converts the PoseData object to an evo PoseTrajectory3D object.
+
+        Returns:
+            evo.core.trajectory.PoseTrajectory3D: evo PoseTrajectory3D object
+        """
+        if self.T_premultiply is not None or self.T_postmultiply is not None:
+            assert False, "Cannot convert transformed poses to evo PoseTrajectory3D"
+        quat_wxyz = self.orientations[:, [3,0,1,2]]
+        return evo.core.trajectory.PoseTrajectory3D(self.positions, quat_wxyz, self.times)
     
     @classmethod
     def static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str):
