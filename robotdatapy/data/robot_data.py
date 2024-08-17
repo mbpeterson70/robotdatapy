@@ -29,17 +29,22 @@ class RobotData():
     def tf(self):
         return self.times[-1]
             
-    def idx(self, t):
+    def idx(self, t, force_single=False, force_double=False):
         """
         Finds the index of pose info closes to the desired time.
 
         Args:
             t (float): time
+            force_single (bool): If True, will only return a single index.
+            force_double (bool): If True, will return a list of two indices.
 
         Returns:
-            int: Index of pose info closest to desired time or None if no time is available within 
-                tolerance.
+            int: Index of pose info closest to desired time. Returns two indices for using
+                interpolating between two pieces of data.
         """
+        assert not (force_single and force_double), "Cannot force single and double"
+        find_double = (self.interp or force_double) and not force_single
+
         op1_exists = np.where(self.times <= t)[0].shape[0]
         op2_exists = np.where(self.times >= t)[0].shape[0]
         if (not op1_exists and not op2_exists) or \
@@ -53,21 +58,21 @@ class RobotData():
         if self.causal:
             idx = op1
         elif not op1_exists: 
-            idx = op2 if not self.interp else [op2, op2]
+            idx = op2 if not find_double else [op2, op2]
         elif not op2_exists: 
-            idx = op1 if not self.interp else [op1, op1]
-        elif self.interp:
+            idx = op1 if not find_double else [op1, op1]
+        elif find_double:
             idx = [op1, op2]
         elif abs(t - self.times[op1]) < abs(t - self.times[op2]): 
             idx = op1
         else: 
             idx = op2
         
-        if self.interp and (abs(self.times[idx[0]] - t) > self.time_tol or \
+        if find_double and (abs(self.times[idx[0]] - t) > self.time_tol or \
                             abs(self.times[idx[1]] - t) > self.time_tol):
             raise NoDataNearTimeException(t_desired=t, 
                                           t_closest=[self.times[idx[0]], self.times[idx[1]]])
-        elif self.interp:
+        elif find_double:
             return idx
         # check to make sure found time is close enough
         elif abs(self.times[idx] - t) > self.time_tol:
@@ -75,12 +80,23 @@ class RobotData():
         else: 
             return idx
         
-    def get_val(self, vals, t):
-        idx = self.idx(t)
+    def get_val(self, vals, t, **kwargs):
+        idx = self.idx(t, **kwargs)
         return vals[idx]
     
-    def nearest_time(self, t):
-        return self.get_val(self.times, t)
+    def nearest_time(self, t, force_double=False) -> float:
+        """
+        Returns the time nearest to the desired time.
+
+        Args:
+            t (float): Desired time.
+            force_double (bool, optional): If set to true, will return the two nearest times 
+                (on plus and minus side). Defaults to False.
+
+        Returns:
+            float: Nearest time in the data.
+        """
+        return self.get_val(self.times, t, force_single=not force_double)
     
     def clip(self, t0, tf):
         assert False, "clip function not implemented for this data type."
