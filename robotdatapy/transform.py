@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
+from typing import List
 
 def transform_vec(T, vec):
     unshaped_vec = vec.reshape(-1)
@@ -155,3 +156,27 @@ def aruns(pts1, pts2, weights=None):
     t = mean1.reshape((-1,1)) - R @ mean2.reshape((-1,1))
     T = np.concatenate([np.concatenate([R, t], axis=1), np.hstack([np.zeros((1, R.shape[0])), [[1]]])], axis=0)
     return T
+
+def mean(transforms: List[np.ndarray]) -> np.ndarray:
+    """
+    Finds the mean rigid transform from a list of transforms
+
+    Args:
+        transforms (List[np.ndarray, shape=(3,3) or (4,4)]): list of transforms to average
+
+    Returns:
+        np.ndarray, shape=(3,3) or (4,4): mean transform
+    """
+    assert len(transforms) > 0, "transforms must have at least one element"
+    shape = transforms[0].shape
+    assert all([T.shape == shape for T in transforms]), "All transforms must have the same shape"
+
+    if shape == (3,3):
+        assert False, "Not implemented"
+    elif shape == (4,4):
+        mean_rot = Rot.mean(Rot.from_matrix([T[:3,:3] for T in transforms]))
+        mean_t = np.mean([T[:3,3] for T in transforms], axis=0)
+        T = np.eye(4)
+        T[:3,:3] = mean_rot.as_matrix()
+        T[:3,3] = mean_t
+        return T
