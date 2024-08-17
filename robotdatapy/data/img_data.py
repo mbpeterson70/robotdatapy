@@ -10,7 +10,6 @@ import cv2
 import pykitti
 from robotdatapy.camera import CameraParams
 from robotdatapy.exceptions import MsgNotFound
-# TODO: support non-rvl compressed depth images
 
 # ROS dependencies
 try:
@@ -97,7 +96,7 @@ class ImgData(RobotData):
         with AnyReader([Path(path)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
-                assert False, f"topic {topic} not found in bag file {path}"
+                raise MsgNotFound(topic, path)
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 if connection.topic != topic:
                     continue
@@ -201,9 +200,7 @@ class ImgData(RobotData):
         """
         idx = self.idx(t)
         if self.data_type == 'bag' or self.data_type == 'bag2':
-            if idx is None:
-                return None
-            elif not self.compressed:
+            if not self.compressed:
                 img = self.bridge.imgmsg_to_cv2(self.imgs[idx], desired_encoding=self.compressed_encoding)
             elif self.compressed_rvl:
                 from rvl import decompress_rvl

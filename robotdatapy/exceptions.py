@@ -8,6 +8,8 @@ class NoDataNearTimeException(Exception):
 
 class MsgNotFound(Exception):
     
-    def __init__(self, topic):
+    def __init__(self, topic, path=None):
         message = f"Message from topic {topic} not found"
+        if path is not None:
+            message += f" in path {path}"
         super().__init__(message)
