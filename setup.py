@@ -14,7 +14,8 @@ setup(
                         'pandas',
                         'rosbags',
                         'pykitti',
-                        'evo'
+                        'evo',
+                        'opencv-python',
                       ],
 
 )
