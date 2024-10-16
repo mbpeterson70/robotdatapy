@@ -9,8 +9,23 @@ import matplotlib.pyplot as plt
 import pykitti
 import cv2
 import evo
+import csv
 
 from robotdatapy.data.robot_data import RobotData
+
+KIMERA_MULTI_GT_CSV_OPTIONS = {
+    'cols': {
+        'time': ["#timestamp_kf"],
+        'position': ['x', 'y', 'z'],
+        'orientation': ['qw', 'qx', 'qy', 'qz'],
+    },
+    'col_nums': {
+        'time': [0],
+        'position': [1, 2, 3],
+        'orientation': [4, 5, 6, 7]
+    },
+    'timescale': 1e-9
+}
 
 class PoseData(RobotData):
     """
@@ -99,19 +114,7 @@ class PoseData(RobotData):
             path (str): CSV file path
             kwargs: Additional arguments to pass to from_csv
         """
-        csv_options = {
-            'cols': {
-                'time': ["#timestamp_kf"],
-                'position': ['x', 'y', 'z'],
-                'orientation': ['qw', 'qx', 'qy', 'qz']
-            },
-            'col_nums': {
-                'time': [0],
-                'position': [1, 2, 3],
-                'orientation': [5, 6, 7, 4]
-            },
-            'timescale': 1e-9
-        }
+        csv_options = KIMERA_MULTI_GT_CSV_OPTIONS
         return cls.from_csv(path, csv_options, **kwargs)
     
     @classmethod
@@ -216,7 +219,6 @@ class PoseData(RobotData):
         return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol, 
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
 
-
     def position(self, t):
         """
         Position at time t.
@@ -240,7 +242,7 @@ class PoseData(RobotData):
             t (float): time
 
         Returns:
-            np.array, shape(4,): orientation as a quaternion
+            np.array, shape(4,): orientation as a quaternion (x, y, z, w)
         """
         if self.T_premultiply is not None or self.T_postmultiply is not None:
             return Rot.from_matrix(self.T_WB(t)[:3,:3]).as_quat()
@@ -406,6 +408,28 @@ class PoseData(RobotData):
         quat_wxyz = self.orientations[:, [3,0,1,2]]
         return evo.core.trajectory.PoseTrajectory3D(self.positions, quat_wxyz, self.times)
     
+    def to_csv(self, path, csv_options=KIMERA_MULTI_GT_CSV_OPTIONS):
+        """
+        Converts the PoseData object to a csv file.
+        
+        Args:
+            path (str): Path to save the csv file
+            csv_options (dict): Can include dict of structure: dict['col'], dict['col_nums'] which 
+                map to dicts containing keys of 'time', 'position', and 'orientation' and the 
+                corresponding column names and numbers. csv_options['timescale'] can be given if 
+                the time column is not in seconds.
+        """
+        assert csv_options == KIMERA_MULTI_GT_CSV_OPTIONS, \
+            "Only KIMERA_MULTI_GT_CSV_OPTIONS is supported"
+        data = [csv_options['cols']['time'] + csv_options['cols']['position'] \
+            + csv_options['cols']['orientation']]
+        for t in self.times:
+            data.append([int(t/csv_options['timescale'])] + self.position(t).tolist() + 
+                        [self.orientation(t)[3]] + self.orientation(t)[:3].tolist())
+        with open(path, 'w') as f:
+            writer = csv.writer(f)
+            writer.writerows(data)      
+    
     @classmethod
     def static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str):
         """
@@ -472,17 +496,3 @@ class PoseData(RobotData):
                     for transform_msg in msg.transforms:
                         tf_tree[transform_msg.child_frame_id] = (transform_msg.header.frame_id, transform_msg.transform)
         return tf_tree
-    
-KIMERA_MULTI_GT_CSV_OPTIONS = {
-    'cols': {
-        'time': ["#timestamp_kf"],
-        'position': ['x', 'y', 'z'],
-        'orientation': ["qx", "qy", "qz", "qw"]
-    },
-    'col_nums': {
-        'time': [0],
-        'position': [1, 2, 3],
-        'orientation': [5, 6, 7, 4]
-    },
-    'timescale': 1e-9
-}
