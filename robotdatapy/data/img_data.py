@@ -4,6 +4,7 @@ from rosbags.highlevel import AnyReader
 from pathlib import Path
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
+import concurrent
 
 from robotdatapy.data.robot_data import RobotData
 import cv2
@@ -27,8 +28,8 @@ class ImgData(RobotData):
             self, 
             times, 
             imgs,
-            data_path,
             data_type,
+            data_path=None,
             time_tol=.1, 
             causal=False, 
             t0=None, 
@@ -42,8 +43,8 @@ class ImgData(RobotData):
         Args:
             times (np.array, shape=(n,)): times of images
             imgs (list, shape=(n,)): list of images or image messages
+            data_type (str): type of data file: 'bag', 'kitti', 'raw'
             data_path (str): path to data file
-            data_type (str): type of data file
             time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
                 no pose is available within tolerance, None is returned. Defaults to .1.
             t0 (float, optional): Local time at the first msg. If not set, uses global time from 
@@ -56,7 +57,7 @@ class ImgData(RobotData):
         self.set_times(times)
         self.imgs = imgs
         
-        data_path = os.path.expanduser(os.path.expandvars(data_path))
+        data_path = os.path.expanduser(os.path.expandvars(data_path)) if data_path is not None else None
         self.compressed = compressed
         self.compressed_encoding = compressed_encoding
         self.compressed_rvl = compressed_rvl
@@ -113,7 +114,9 @@ class ImgData(RobotData):
         img_msgs = [msg for _, msg in sorted(zip(times, img_msgs), key=lambda zipped: zipped[0])]
         times = sorted(times)
 
-        return cls(times, img_msgs, path, 'bag', time_tol, causal, t0, compressed, compressed_encoding, compressed_rvl)
+        return cls(times=times, imgs=img_msgs, data_type='bag',  data_path=path, 
+                   time_tol=time_tol, causal=causal, t0=t0, compressed=compressed, 
+                   compressed_encoding=compressed_encoding, compressed_rvl=compressed_rvl)
 
 
     @classmethod
@@ -146,10 +149,57 @@ class ImgData(RobotData):
             dataset = pykitti.odometry(data_file, kitti_sequence)
             times = np.asarray([d.total_seconds() for d in dataset.timestamps])
 
-        img_data = cls(times, dataset, path, 'kitti', time_tol, causal, t0, compressed, compressed_encoding, compressed_rvl)
+        img_data = cls(times=times, imgs=dataset, data_type='kitti',  data_path=path,
+                       time_tol=time_tol, causal=causal, t0=t0, compressed=compressed, 
+                       compressed_encoding=compressed_encoding, compressed_rvl=compressed_rvl)
         img_data.kitti_type = kitti_type
         img_data.kitti_depth_img_path = data_file + '/sequences/' + kitti_sequence  + '/depth/'
         return img_data
+    
+    @classmethod
+    def from_zip(cls, path, **kwargs):
+        """
+        Load image data from zip file
+        """
+        times = []
+        imgs = []
+        directory_path = path.replace('.zip', '')
+        directory_path = os.path.expanduser(os.path.expandvars(directory_path))
+        
+        os.system(f"cd {os.path.dirname(path)} && unzip {path}")
+        with open(os.path.join(directory_path, 'metadata.txt'), 'r') as f:
+            for line in f:
+                idx, secs, nsecs = line.strip().split()
+                times.append(float(secs) + float(nsecs) * 1e-9)
+                imgs.append(cv2.imread(os.path.join(directory_path, f"{idx}.png")))
+        os.system(f"rm -r {directory_path}")
+        return cls(times=times, imgs=imgs, data_type='raw', **kwargs)
+        
+    
+    def to_zip(self, path):
+        """
+        Save image data to zip file
+        """
+        directory_path = path.replace('.zip', '')
+        os.makedirs(os.path.expanduser(os.path.expandvars(directory_path)), exist_ok=False)
+        for i, t in enumerate(self.times):
+            with open(os.path.join(directory_path, 'metadata.txt'), 'w') as f:
+                f.write(f"{i} {int(t)} {int((t % 1) * 1e9)}\n")
+        for i, t in enumerate(self.times):
+            cv2.imwrite(os.path.join(directory_path, f"{i}.png"), self.img(t))
+        # TODO: speedup?
+        # write_img = lambda i: cv2.imwrite(os.path.join(directory_path, f"{i}.png"), self.img(self.times[i]))
+        # executor = concurrent.futures.ProcessPoolExecutor(10)
+        # futures = [executor.submit(write_img, i) for i in range(len(self.times))]
+        # concurrent.futures.wait(futures)
+
+        prev_dir = os.getcwd()
+        os.chdir(os.path.dirname(directory_path))
+        os.system(f"zip -r {os.path.basename(path)} {os.path.basename(directory_path)}")
+        os.system(f"rm -r {os.path.basename(directory_path)}")
+        os.chdir(prev_dir)
+        
+        
     
     def extract_params(self, topic=None):
         """
@@ -220,6 +270,13 @@ class ImgData(RobotData):
         elif self.data_type == 'kitti' and self.kitti_type == 'depth':
             # img = np.load(self.data_file + '/sequences/' + self.kitti_sequence  + '/depth/' + str(idx).zfill(6) + '.npy')
             img = np.load(self.kitti_depth_img_path + str(idx).zfill(6) + '.npy')
+        
+        elif self.data_type == 'raw':
+            img = self.imgs[idx]
+            
+        else:
+            raise ValueError("data_type not supported, please choose from: raw, bag, kitti")
+            
         return img
 
     
