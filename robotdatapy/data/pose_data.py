@@ -17,12 +17,12 @@ KIMERA_MULTI_GT_CSV_OPTIONS = {
     'cols': {
         'time': ["#timestamp_kf"],
         'position': ['x', 'y', 'z'],
-        'orientation': ['qw', 'qx', 'qy', 'qz'],
+        'orientation': ["qx", "qy", "qz", "qw"],
     },
     'col_nums': {
         'time': [0],
         'position': [1, 2, 3],
-        'orientation': [4, 5, 6, 7]
+        'orientation': [5, 6, 7, 4]
     },
     'timescale': 1e-9
 }
