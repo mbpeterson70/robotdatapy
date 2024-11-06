@@ -33,6 +33,7 @@ class ImgData(RobotData):
             time_tol=.1, 
             causal=False, 
             t0=None, 
+            time_range=None,
             compressed=True,
             compressed_encoding='passthrough',
             compressed_rvl=False
@@ -54,6 +55,14 @@ class ImgData(RobotData):
             compressed (bool, optional): True if data_path contains compressed images
         """        
         super().__init__(time_tol=time_tol, interp=False, causal=causal)
+
+        if time_range is not None:
+            assert time_range[0] < time_range[1], "time_range must be given in incrementing order"
+            start_idx = np.where(np.array(times) >= time_range[0])[0][0]
+            end_idx = np.where(np.array(times) <= time_range[1])[0][-1]
+            times = times[start_idx:end_idx+1]
+            imgs = imgs[start_idx:end_idx+1]
+        
         self.set_times(times)
         self.imgs = imgs
         
@@ -182,8 +191,8 @@ class ImgData(RobotData):
         """
         directory_path = path.replace('.zip', '')
         os.makedirs(os.path.expanduser(os.path.expandvars(directory_path)), exist_ok=False)
-        for i, t in enumerate(self.times):
-            with open(os.path.join(directory_path, 'metadata.txt'), 'w') as f:
+        with open(os.path.join(directory_path, 'metadata.txt'), 'w') as f:
+            for i, t in enumerate(self.times):
                 f.write(f"{i} {int(t)} {int((t % 1) * 1e9)}\n")
         for i, t in enumerate(self.times):
             cv2.imwrite(os.path.join(directory_path, f"{i}.png"), self.img(t))
