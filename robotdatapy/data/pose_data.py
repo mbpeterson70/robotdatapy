@@ -10,6 +10,7 @@ import pykitti
 import cv2
 import evo
 import csv
+import yaml
 
 from robotdatapy.data.robot_data import RobotData
 
@@ -171,6 +172,67 @@ class PoseData(RobotData):
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
         
     @classmethod
+    def from_bag_tf(cls, path: str, parent_frame: str, child_frame: str, **kwargs):
+        """
+        Create a PoseData object from a ROS bag file using tf (/tf, /tf_static topic) messages.
+
+        Args:
+            path (str): ROS bag file path
+            parent_frame (str): parent frame
+            child_frame (str): child frame
+            kwargs: Additional arguments to pass to from_bag
+            
+        Returns:
+            PoseData: PoseData object
+        """
+        tf_tree = cls._tf_tree_from_bag(path)
+        frame_chain = [child_frame]
+        tf_types = []
+        T_parent_child = []
+        
+        
+        while frame_chain[-1] != parent_frame:
+            if frame_chain[-1] not in tf_tree:
+                assert False, f"parent_frame {parent_frame} not found in bag file {path}"
+            new_parent = frame_chain[-1]
+            frame_chain.append(tf_tree[new_parent][1])
+            tf_types.append(tf_tree[new_parent][0])
+            
+        frame_chain = frame_chain[::-1]
+        tf_types = tf_types[::-1]
+            
+        for joint_i in range(len(tf_types)):
+            if tf_types[joint_i] == 'tf_static':
+                T_parent_child.append(cls.static_tf_from_bag(path, 
+                    frame_chain[joint_i], frame_chain[joint_i+1]))
+            elif tf_types[joint_i] == 'tf':
+                T_parent_child.append(cls._from_bag_single_tf_joint(path, 
+                    frame_chain[joint_i], frame_chain[joint_i+1], **kwargs))
+            else:
+                assert False, "invalid tf type"
+        
+        times = []
+        for joint_i in range(len(tf_types)-1, -1, -1):
+            if tf_types[joint_i] == 'tf':
+                times = T_parent_child[joint_i].times
+                break
+        assert len(times) > 0, "no times found"
+        
+        poses = []
+        for t in times:
+            T = np.eye(4)
+            for joint_i in range(len(tf_types)):
+                if tf_types[joint_i] == 'tf_static':
+                    T = T @ T_parent_child[joint_i]
+                elif tf_types[joint_i] == 'tf':
+                    T = T @ T_parent_child[joint_i].pose(t)
+                else:
+                    assert False, "invalid tf type"
+            poses.append(T)
+            
+        return cls.from_times_and_poses(times, poses, **kwargs)
+        
+    @classmethod
     def from_times_and_poses(cls, times, poses, **kwargs):
         """
         Create a PoseData object from times and poses.
@@ -218,6 +280,19 @@ class PoseData(RobotData):
 
         return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol, 
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
+
+    @classmethod
+    def from_yaml(cls, yaml_path):
+        with open(os.path.expanduser(yaml_path), 'r') as f:
+            args = yaml.safe_load(f)
+            if args['type'] == 'bag':
+                return cls.from_bag(**{k: v for k, v in args.items() if k != 'type'})
+            elif args['type'] == 'csv':
+                return cls.from_csv(**{k: v for k, v in args.items() if k != 'type'})
+            elif args['type'] == 'bag_tf':
+                return cls.from_bag_tf(**{k: v for k, v in args.items() if k != 'type'})
+            else:
+                raise ValueError("Invalid pose data type")
 
     def position(self, t):
         """
@@ -496,3 +571,71 @@ class PoseData(RobotData):
                     for transform_msg in msg.transforms:
                         tf_tree[transform_msg.child_frame_id] = (transform_msg.header.frame_id, transform_msg.transform)
         return tf_tree
+    
+    @classmethod
+    def _tf_tree_from_bag(cls, path: str):
+        """
+        Returns a dict where each key is a child frame id and the value is a tuple including the parent frame id and 
+        whether the tf is static or dynamic.
+
+        Args:
+            path (str): Path to ROS bag.
+            
+        Returns:
+            dict: tf tree dictionary
+        """
+        tf_tree = {}
+        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))]) as reader:
+            for tf_type in ['tf', 'tf_static']:
+                connections = [x for x in reader.connections if x.topic == f"/{tf_type}"]
+                for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+                    msg = reader.deserialize(rawdata, connection.msgtype)
+                    if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
+                        for transform_msg in msg.transforms:
+                            # if has appeared multiple times, check that the parent is the same
+                            if transform_msg.child_frame_id in tf_tree:
+                                assert tf_tree[transform_msg.child_frame_id][1] == transform_msg.header.frame_id, \
+                                    f"child frame {transform_msg.child_frame_id} has multiple parents"
+                                assert tf_tree[transform_msg.child_frame_id][0] == tf_type, \
+                                    f"child frame {transform_msg.child_frame_id} has multiple tf types"
+                            else:
+                                tf_tree[transform_msg.child_frame_id] = (tf_type, transform_msg.header.frame_id)
+        return tf_tree
+    
+    @classmethod
+    def _from_bag_single_tf_joint(cls, path: str, parent_frame: str, child_frame: str, **kwargs):
+        """
+        Extracts a dynamic transform from a ROS bag file in the form of a PoseData object. 
+        Transform is returned as T^parent_child, where T is a 4x4 rigid body transform and expresses 
+        the pose of the child in the parent frame, which is equivalent to the transformation 
+        from the child frame to the parent frame.
+
+        Args:
+            parent_frame (str): parent frame
+            child_frame (str): child frame
+
+        Returns:
+            PoseData: PoseData object
+        """
+        times = []
+        positions = []
+        orientations = []
+        
+        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))]) as reader:
+            connections = [x for x in reader.connections if x.topic == '/tf']
+            if len(connections) == 0:
+                assert False, f"topic /tf not found in bag file {path}"
+            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+                msg = reader.deserialize(rawdata, connection.msgtype)
+                if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
+                    for transform_msg in msg.transforms:
+                        if transform_msg.child_frame_id == child_frame and transform_msg.header.frame_id == parent_frame:
+                            times.append(transform_msg.header.stamp.sec + transform_msg.header.stamp.nanosec*1e-9)
+                            positions.append([transform_msg.transform.translation.x, 
+                                              transform_msg.transform.translation.y, 
+                                              transform_msg.transform.translation.z])
+                            orientations.append([transform_msg.transform.rotation.x, 
+                                                 transform_msg.transform.rotation.y, 
+                                                 transform_msg.transform.rotation.z, 
+                                                 transform_msg.transform.rotation.w])
+        return cls(times, positions, orientations, **kwargs)
