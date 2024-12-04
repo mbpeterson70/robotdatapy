@@ -221,24 +221,7 @@ class ImgData(RobotData):
             np.array, shape=(3,3): camera intrinsic matrix K
         """
         if self.data_type == 'bag' or self.data_type == 'bag2':
-            assert topic, "Topic name should be provided when using rosbag."
-            with AnyReader([Path(self.data_path)]) as reader:
-                connections = [x for x in reader.connections if x.topic == topic]
-                if len(connections) == 0:
-                    assert False, f"topic {topic} not found in bag file {self.data_path}"
-                for (connection, timestamp, rawdata) in reader.messages(connections=connections):
-                    if connection.topic == topic:
-                        msg = reader.deserialize(rawdata, connection.msgtype)
-                        try:
-                            K = np.array(msg.K).reshape((3,3))
-                            D = np.array(msg.D)
-                        except:
-                            K = np.array(msg.k).reshape((3,3))
-                            D = np.array(msg.d)
-                        width = msg.width
-                        height = msg.height
-                        self.camera_params = CameraParams(K, D, width, height)
-                        break
+            self.camera_params = CameraParams.from_bag(self.data_path, topic)
         elif self.data_type == 'kitti':
             P2 = self.imgs.calib.P_rect_20.reshape((3, 4))
             k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)

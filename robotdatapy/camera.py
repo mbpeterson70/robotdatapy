@@ -85,6 +85,8 @@ class CameraParams:
             D = np.array(msg.d)
         width = msg.width
         height = msg.height
+        if len(D) == 0:
+            D = np.zeros(4)
         return cls(K, D, width, height)
     
     @property
