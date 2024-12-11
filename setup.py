@@ -4,7 +4,7 @@ setup(
     name='robotdatapy',
     version='1.0.0',    
     description='Python package for interfacing with robot data',
-    url='',
+    url='https://github.com/mbpeterson70/robotdatapy',
     author='Mason Peterson',
     author_email='masonbp@mit.edu',
     license='MIT',
