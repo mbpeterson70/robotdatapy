@@ -183,6 +183,16 @@ class ImgData(RobotData):
                 imgs.append(cv2.imread(os.path.join(directory_path, f"{idx}.png")))
         os.system(f"rm -r {directory_path}")
         return cls(times=times, imgs=imgs, data_type='raw', **kwargs)
+    
+    @classmethod
+    def from_npz(cls, path, **kwargs):
+        """
+        Load image data from npz file
+        """
+        data = np.load(path)
+        times = data['times']
+        imgs = data['imgs']
+        return cls(times=times, imgs=imgs, data_type='raw', **kwargs)
         
     
     def to_zip(self, path):
@@ -208,6 +218,15 @@ class ImgData(RobotData):
         os.system(f"rm -r {os.path.basename(directory_path)}")
         os.chdir(prev_dir)
         
+    def to_npz(self, path):
+        """
+        Save image data to npz file
+        """
+        imgs = []
+        for i in range(len(self.times)):
+            imgs.append(self._load_img(i))
+        np.savez(path, times=np.array(self.times), imgs=np.array(imgs))
+        return
         
     
     def extract_params(self, topic=None):
@@ -230,7 +249,7 @@ class ImgData(RobotData):
             assert False, "data_type not supported, please choose from: bag, bag2, kitti"
         return self.camera_params.K, self.camera_params.D
         
-    def img(self, t):
+    def img(self, t: float):
         """
         Image at time t.
 
@@ -241,6 +260,50 @@ class ImgData(RobotData):
             cv image
         """
         idx = self.idx(t)
+        return self._load_img(idx)
+    
+    def show(self, t, ax=None):
+        """
+        Show image at time t.
+
+        Args:
+            t (float): time
+        """
+        img = self.img(t)
+        if ax is None:
+            _, ax = plt.subplots()
+        if len(img.shape) == 3:
+            ax.imshow(img[...,::-1])
+        else:
+            ax.imshow(img)
+        ax.tick_params(axis='both', which='both', bottom=False, top=False, left=False, right=False, labelbottom=False, labelleft=False)
+        return ax
+    
+    def clip(self, t0: float, tf: float):
+        """
+        Clips image data from between t0 and tf
+
+        Args:
+            t0 (float): start clip time
+            tf (float): end clip time
+        """
+        idx0 = self.idx(t0, force_single=True)
+        idxf = self.idx(tf, force_single=True)
+        self.set_times(self.times[idx0:idxf+1])
+        self.imgs = self.imgs[idx0:idxf+1]
+        return
+        
+    
+    def _load_img(self, idx: int):
+        """
+        Loads image at index idx
+        
+        Args:
+            idx (int): index of image
+        
+        Returns:
+            cv image
+        """
         if self.data_type == 'bag' or self.data_type == 'bag2':
             if not self.compressed:
                 img = self.bridge.imgmsg_to_cv2(self.imgs[idx], desired_encoding=self.compressed_encoding)
@@ -271,24 +334,6 @@ class ImgData(RobotData):
             
         return img
 
-    
-    def show(self, t, ax=None):
-        """
-        Show image at time t.
-
-        Args:
-            t (float): time
-        """
-        img = self.img(t)
-        if ax is None:
-            _, ax = plt.subplots()
-        if len(img.shape) == 3:
-            ax.imshow(img[...,::-1])
-        else:
-            ax.imshow(img)
-        ax.tick_params(axis='both', which='both', bottom=False, top=False, left=False, right=False, labelbottom=False, labelleft=False)
-        return ax
-    
     @property
     def K(self):
         return self.camera_params.K
