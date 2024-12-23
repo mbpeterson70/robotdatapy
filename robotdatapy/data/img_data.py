@@ -80,7 +80,7 @@ class ImgData(RobotData):
         self.camera_params = CameraParams()
             
     @classmethod
-    def from_bag(cls, path, topic, time_range=None, time_tol=.1, causal=False, 
+    def from_bag(cls, path, topic, camera_info_topic=None, time_range=None, time_tol=.1, causal=False, 
                  t0=None, compressed=True, compressed_encoding='passthrough', compressed_rvl=False):
         """
         Creates ImgData object from bag file
@@ -88,6 +88,8 @@ class ImgData(RobotData):
         Args:
             path (str): ROS bag file path
             topic (str): ROS image topic
+            camera_info_topic (str, optional): ROS camera info topic used to extract camera 
+                parameters if provided. Defaults to None.
             time_range (list, shape=(2,), optional): Two element list indicating range of times
                 that should be stored within object
             time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
@@ -123,10 +125,12 @@ class ImgData(RobotData):
         img_msgs = [msg for _, msg in sorted(zip(times, img_msgs), key=lambda zipped: zipped[0])]
         times = sorted(times)
 
-        return cls(times=times, imgs=img_msgs, data_type='bag',  data_path=path, 
+        img_data = cls(times=times, imgs=img_msgs, data_type='bag',  data_path=path, 
                    time_tol=time_tol, causal=causal, t0=t0, compressed=compressed, 
                    compressed_encoding=compressed_encoding, compressed_rvl=compressed_rvl)
-
+        if camera_info_topic is not None:
+            img_data.extract_params(camera_info_topic)
+        return img_data
 
     @classmethod
     def from_kitti(cls, path, kitti_type, kitti_sequence='00', time_range=None, time_tol=.1, causal=False, 

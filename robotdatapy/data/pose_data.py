@@ -1,3 +1,17 @@
+###########################################################
+#
+# pose_data.py
+#
+# Interface for robot pose data. Currently supports data 
+# from ROS bags, CSV files, and KITTI datasets.
+#
+# Authors: Mason Peterson, Lucas Jia
+#
+# December 21, 2024
+#
+###########################################################
+
+
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 from scipy.spatial.transform import Slerp
@@ -282,17 +296,38 @@ class PoseData(RobotData):
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
 
     @classmethod
+    def from_dict(cls, pose_data_dict):
+        """
+        Create a PoseData object as specified by a dictionary of kwargs.
+
+        Args:
+            pose_data_dict (dict): Dictionary with key 'type' and other kwargs
+                depending on the type. Type can be 'bag', 'csv', 'kitti', or 'bag_tf.
+
+        Raises:
+            ValueError: ValueError if invalid type
+
+        Returns:
+            PoseData: PoseData object.
+        """
+        if pose_data_dict['type'] == 'bag':
+            return cls.from_bag(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
+        elif pose_data_dict['type'] == 'bag_tf':
+            return cls.from_bag_tf(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
+        elif pose_data_dict['type'] == 'csv':
+            return cls.from_csv(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
+        elif pose_data_dict['type'] == 'kitti':
+            return cls.from_kitti(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
+        else:
+            raise ValueError("Invalid pose data type")
+        
+
+    @classmethod
     def from_yaml(cls, yaml_path):
         with open(os.path.expanduser(yaml_path), 'r') as f:
             args = yaml.safe_load(f)
-            if args['type'] == 'bag':
-                return cls.from_bag(**{k: v for k, v in args.items() if k != 'type'})
-            elif args['type'] == 'csv':
-                return cls.from_csv(**{k: v for k, v in args.items() if k != 'type'})
-            elif args['type'] == 'bag_tf':
-                return cls.from_bag_tf(**{k: v for k, v in args.items() if k != 'type'})
-            else:
-                raise ValueError("Invalid pose data type")
+        return cls.from_dict(args)
+            
 
     def position(self, t):
         """

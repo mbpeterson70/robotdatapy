@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='robotdatapy',
-    version='1.0.0',    
+    version='1.0.1',    
     description='Python package for interfacing with robot data',
     url='https://github.com/mbpeterson70/robotdatapy',
     author='Mason Peterson',
