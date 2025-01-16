@@ -170,17 +170,31 @@ class PoseData(RobotData):
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {path}"
+
+            last_path_msg = None
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
-                times.append(msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9)
                 if type(msg).__name__ == 'geometry_msgs__msg__PoseStamped':
                     pose = msg.pose
                 elif type(msg).__name__ == 'nav_msgs__msg__Odometry':
                     pose = msg.pose.pose
+                elif type(msg).__name__ == 'nav_msgs__msg__Path':
+                    last_path_msg = msg
+                    continue
                 else:
                     assert False, "invalid msg type (not PoseStamped or Odometry)"
+                times.append(msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9)
                 positions.append([pose.position.x, pose.position.y, pose.position.z])
-                orientations.append([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
+                orientations.append([pose.orientation.x, pose.orientation.y, 
+                                     pose.orientation.z, pose.orientation.w])
+            
+            if last_path_msg is not None:
+                for pose_stamped in last_path_msg.poses:
+                    times.append(pose_stamped.header.stamp.sec + pose_stamped.header.stamp.nanosec*1e-9)
+                    positions.append([pose_stamped.pose.position.x, 
+                                      pose_stamped.pose.position.y, pose_stamped.pose.position.z])
+                    orientations.append([pose_stamped.pose.orientation.x, pose_stamped.pose.orientation.y, 
+                                         pose_stamped.pose.orientation.z, pose_stamped.pose.orientation.w])
 
         return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol, 
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
