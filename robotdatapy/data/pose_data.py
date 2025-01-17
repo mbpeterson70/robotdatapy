@@ -464,6 +464,15 @@ class PoseData(RobotData):
         self.positions = self.positions[idx0:idxf]
         self.orientations = self.orientations[idx0:idxf]
 
+    def path_length(self) -> float:
+        """
+        Returns the length of the path
+
+        Returns:
+            float: path length
+        """
+        return np.sum(np.linalg.norm(np.diff(self.positions, axis=0), axis=1))
+
     def plot2d(self, ax=None, dt=.1, t=None, t0=None, tf=None, axes='xy', pose=False, trajectory=True, axis_len=1.0, **kwargs):
         """
         Plots the position data in 2D
