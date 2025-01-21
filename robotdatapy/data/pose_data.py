@@ -71,6 +71,52 @@ class PoseData(RobotData):
             self.set_t0(t0)
         self.T_premultiply = T_premultiply
         self.T_postmultiply = T_postmultiply
+
+    @classmethod
+    def from_dict(cls, pose_data_dict):
+        """
+        Create a PoseData object as specified by a dictionary of kwargs.
+
+        Args:
+            pose_data_dict (dict): Dictionary with key 'type' and other kwargs
+                depending on the type. Type can be 'bag', 'csv', 'kitti', or 'bag_tf.
+
+        Raises:
+            ValueError: ValueError if invalid type
+
+        Returns:
+            PoseData: PoseData object.
+        """
+        if pose_data_dict['type'] == 'bag':
+            return cls.from_bag(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
+        elif pose_data_dict['type'] == 'bag_tf':
+            return cls.from_bag_tf(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
+        elif pose_data_dict['type'] == 'csv':
+            return cls.from_csv(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
+        elif pose_data_dict['type'] == 'kitti':
+            return cls.from_kitti(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
+        else:
+            raise ValueError("Invalid pose data type")
+        
+    @classmethod
+    def from_yaml(cls, yaml_path):
+        """
+        Create a PoseData object as specified by a dictionary of kwargs contained in
+        a yaml file (see from_dict).
+
+        Args:
+            pose_data_dict (dict): Dictionary with key 'type' and other kwargs
+                depending on the type. Type can be 'bag', 'csv', 'kitti', or 'bag_tf.
+
+        Raises:
+            ValueError: ValueError if invalid type
+
+        Returns:
+            PoseData: PoseData object.
+        """
+        with open(os.path.expanduser(yaml_path), 'r') as f:
+            args = yaml.safe_load(f)
+        return cls.from_dict(args)
     
     @classmethod
     def from_csv(cls, path, csv_options, interp=True, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
@@ -172,14 +218,19 @@ class PoseData(RobotData):
                 assert False, f"topic {topic} not found in bag file {path}"
 
             last_path_msg = None
+            t0 = None
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
+                if t0 is None:
+                    t0 = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
                 if type(msg).__name__ == 'geometry_msgs__msg__PoseStamped':
                     pose = msg.pose
                 elif type(msg).__name__ == 'nav_msgs__msg__Odometry':
                     pose = msg.pose.pose
                 elif type(msg).__name__ == 'nav_msgs__msg__Path':
                     last_path_msg = msg
+                    # if msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9 - t0 > 800:
+                    #     break
                     continue
                 else:
                     assert False, "invalid msg type (not PoseStamped or Odometry)"
@@ -308,40 +359,24 @@ class PoseData(RobotData):
 
         return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol, 
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
-
+            
     @classmethod
-    def from_dict(cls, pose_data_dict):
+    def from_TUM_txt(cls, path, **kwargs):
         """
-        Create a PoseData object as specified by a dictionary of kwargs.
+        Creates a PoseData object from a text-file contain pose information using the same format
+            as the TUM dataset (timestamp, position xyz, quaterion xyzw).
 
         Args:
-            pose_data_dict (dict): Dictionary with key 'type' and other kwargs
-                depending on the type. Type can be 'bag', 'csv', 'kitti', or 'bag_tf.
-
-        Raises:
-            ValueError: ValueError if invalid type
+            path (str): Path to text file
 
         Returns:
-            PoseData: PoseData object.
+            PoseData: PoseData object
         """
-        if pose_data_dict['type'] == 'bag':
-            return cls.from_bag(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
-        elif pose_data_dict['type'] == 'bag_tf':
-            return cls.from_bag_tf(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
-        elif pose_data_dict['type'] == 'csv':
-            return cls.from_csv(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
-        elif pose_data_dict['type'] == 'kitti':
-            return cls.from_kitti(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
-        else:
-            raise ValueError("Invalid pose data type")
-        
-
-    @classmethod
-    def from_yaml(cls, yaml_path):
-        with open(os.path.expanduser(yaml_path), 'r') as f:
-            args = yaml.safe_load(f)
-        return cls.from_dict(args)
-            
+        data = np.genfromtxt(path)
+        times = data[:,0]
+        positions = data[:,1:4]
+        orientations = data[:,4:]
+        return cls(times, positions, orientations, **kwargs)
 
     def position(self, t):
         """
