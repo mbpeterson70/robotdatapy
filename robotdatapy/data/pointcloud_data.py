@@ -29,6 +29,8 @@
 """
 Serialization of sensor_msgs__msg__PointCloud2 messages.
 
+rosbag1/rosbag2 compatible port by Qingyuan Li
+
 --------
 Adapted from:
 Serialization of sensor_msgs.PointCloud2 messages.
@@ -39,8 +41,6 @@ File originally ported from:
 https://github.com/ros/common_msgs/blob/f48b00d43cdb82ed9367e0956db332484f676598/
 sensor_msgs/src/sensor_msgs/point_cloud2.py
 --------
-
-rosbag1/rosbag2 compatible port by Qingyuan Li
 """
 
 import os, sys
@@ -115,7 +115,7 @@ def dtype_from_fields(fields, point_step=None) -> np.dtype:
     return np.dtype(dtype_dict)
 
 
-class PointCloud2:
+class PointCloud:
     """
     Class to store & access point clouds in numpy
     """
@@ -180,7 +180,7 @@ class PointCloud2:
         return self.extract_fields(['x', 'y'])
 
 
-class PointCloud2Data(RobotData):
+class PointCloudData(RobotData):
     """
     Class for easy access to point cloud data over time
     """
@@ -228,12 +228,12 @@ class PointCloud2Data(RobotData):
         if t0 is not None:
             self.set_t0(t0)
 
-        self.fields = None if len(self.pointclouds) == 0 else PointCloud2.from_msg(self.pointclouds[0]).fields
+        self.fields = None if len(self.pointclouds) == 0 else PointCloud.from_msg(self.pointclouds[0]).fields
 
     @classmethod
     def from_bag(cls, path, topic, causal=False, time_tol=.1, t0=None, time_range=None):
         """
-        Creates PointCloud2Data object from bag file
+        Creates PointCloudData object from ROS1/ROS2 bag file
 
         Args:
             path (str): ROS bag file path
@@ -278,10 +278,10 @@ class PointCloud2Data(RobotData):
             t (float): time
 
         Returns:
-            PointCloud2
+            PointCloud
         """
         idx = self.idx(t)
-        return PointCloud2.from_msg(self.pointclouds[idx])     
+        return PointCloud.from_msg(self.pointclouds[idx])     
     
     def clip(self, t0: float, tf: float):
         """
