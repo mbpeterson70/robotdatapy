@@ -596,10 +596,43 @@ class PoseData(RobotData):
                         [self.orientation(t)[3]] + self.orientation(t)[:3].tolist())
         with open(path, 'w') as f:
             writer = csv.writer(f)
-            writer.writerows(data)      
+            writer.writerows(data)
+
+    @classmethod
+    def any_static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str):
+        """
+        Extracts a static transform from a ROS bag file. Differs from static_tf_from_bag in that
+        the parent need not be ancestor of the child in the tf tree. Transform is returned as T^parent_child,
+        where T is a 4x4 rigid body transform and expresses the pose of the child in the parent frame, 
+        which is equivalent to the transformation from the child frame to the parent frame.
+
+        Args:
+            parent_frame (str): parent frame
+            child_frame (str): child frame
+
+        Returns:
+            np.array, shape(4,4): static transform
+        """  
+        tf_tree = cls.static_tf_dict_from_bag(path)
+
+        tf_root = None
+        for _, (parent_frame_id, _) in tf_tree.items():
+            if parent_frame_id not in tf_tree:
+                if tf_root is None:
+                    tf_root = parent_frame_id
+                else:
+                    assert False, f'static_tf tree has multiple roots in bag file {path}'
+
+        T_root_f1 = PoseData.static_tf_from_bag(path, tf_root, parent_frame, tf_tree=tf_tree) \
+                    if parent_frame != tf_root else np.eye(4)
+        T_root_f2 = PoseData.static_tf_from_bag(path, tf_root, child_frame, tf_tree=tf_tree) \
+                    if child_frame != tf_root else np.eye(4)
+        
+        return np.linalg.inv(T_root_f1) @ T_root_f2
+        
     
     @classmethod
-    def static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str):
+    def static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str, tf_tree=None):
         """
         Extracts a static transform from a ROS bag file. Transform is returned as T^parent_child,
         where T is a 4x4 rigid body transform and expresses the pose of the child in the parent frame, 
@@ -612,7 +645,7 @@ class PoseData(RobotData):
         Returns:
             np.array, shape(4,4): static transform
         """
-        tf_tree = cls.static_tf_dict_from_bag(path)
+        if tf_tree is None: tf_tree = cls.static_tf_dict_from_bag(path)
                         
         if child_frame not in tf_tree:
             assert False, f"child_frame {child_frame} not found in bag file {path}"
