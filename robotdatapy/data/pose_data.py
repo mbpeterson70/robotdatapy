@@ -450,7 +450,7 @@ class PoseData(RobotData):
         else:
             return self.orientations[idx]
     
-    def T_WB(self, t):
+    def T_WB(self, t, multiply=True):
         """
         Transform from world to body frame (or pose of body within world frame) at time t.
 
@@ -467,10 +467,11 @@ class PoseData(RobotData):
         T_WB = np.eye(4)
         T_WB[:3,:3] = Rot.from_quat(orientation).as_matrix()
         T_WB[:3,3] = position
-        if self.T_premultiply is not None:
-            T_WB = self.T_premultiply @ T_WB
-        if self.T_postmultiply is not None:
-            T_WB = T_WB @ self.T_postmultiply
+        if multiply:
+            if self.T_premultiply is not None:
+                T_WB = self.T_premultiply @ T_WB
+            if self.T_postmultiply is not None:
+                T_WB = T_WB @ self.T_postmultiply
         return T_WB
     
     def pose(self, t):

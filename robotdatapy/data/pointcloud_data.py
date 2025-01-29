@@ -218,7 +218,7 @@ class PointCloudData(RobotData):
             start_idx = np.where(np.array(times) >= time_range[0])[0][0]
             end_idx = np.where(np.array(times) <= time_range[1])[0][-1]
             times = times[start_idx:end_idx+1]
-            imgs = imgs[start_idx:end_idx+1]
+            pointclouds = pointclouds[start_idx:end_idx+1]
         
         self.set_times(times)
         self.pointclouds = pointclouds
@@ -267,7 +267,7 @@ class PointCloudData(RobotData):
         pcds = [msg for _, msg in sorted(zip(times, pcds), key=lambda zipped: zipped[0])]
         times = sorted(times)
 
-        return cls(times=times, pointclouds=pcds, data_type='bag',  data_path=path, 
+        return cls(times=times, pointclouds=pcds, data_type='bag', data_path=path, 
                     causal=causal, time_tol=time_tol, t0=t0, time_range=time_range)
     
     def pointcloud(self, t: float):
