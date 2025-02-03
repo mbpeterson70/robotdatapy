@@ -198,7 +198,23 @@ class ImgData(RobotData):
         imgs = data['imgs']
         return cls(times=times, imgs=imgs, data_type='raw', **kwargs)
         
-    
+    def to_mp4(self, path, fps=30):
+        """
+        Save image data to mp4 file
+
+        Args:
+            path (str): File path to save mp4 file
+            fps (int, optional): frames per second. Defaults to 30.
+        """
+        sample_img = self.img(self.t0)
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(path, fourcc, fps, (sample_img.shape[1], sample_img.shape[0]))
+        for t in self.times:
+            out.write(self.img(t))
+        out.release()
+        cv2.destroyAllWindows()
+        return
+
     def to_zip(self, path):
         """
         Save image data to zip file
