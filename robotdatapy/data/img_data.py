@@ -296,6 +296,20 @@ class ImgData(RobotData):
         self.set_times(self.times[idx0:idxf+1])
         self.imgs = self.imgs[idx0:idxf+1]
         return
+    
+    def img_header(self, t: float):
+        """
+        Returns image header at time t (if data_type is 'bag')
+
+        Args:
+            t (float): time
+
+        Returns:
+            ROS header
+        """
+        assert self.data_type == 'bag' or self.data_type == 'bag2', "must be from a rosbag to have message header"
+        idx = self.idx(t)
+        return self.imgs[idx].header
         
     
     def _load_img(self, idx: int):
