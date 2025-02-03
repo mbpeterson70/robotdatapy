@@ -407,6 +407,19 @@ class PoseData(RobotData):
             return Rot.from_matrix(self.T_WB(t)[:3,:3]).as_quat()
         else:
             return self._untransformed_orientation(t)
+        
+    def rpy(self, t, degrees=False):
+        """
+        Roll, pitch, yaw at time t.
+
+        Args:
+            t (float): time
+            degrees (bool, optional): Returns angles in degrees if True. Defaults to False. 
+
+        Returns:
+            np.array, shape(3,): rpy
+        """
+        return Rot.from_quat(self.orientation(t)).as_euler('ZYX', degrees=degrees)[::-1]
                 
     def _untransformed_position(self, t):
         """
@@ -563,6 +576,68 @@ class PoseData(RobotData):
         ax.set_aspect('equal')
         ax.grid(True)
         return ax
+    
+    def plot_over_time(self, dim=2, ax=None, t=None, dt=0.1, t0=None, tf=None, **kwargs):
+        """
+        Plots position and rotation data over time.
+
+        Args:
+            dim (int, optional): Dimension: 2 (x, y, yaw) or 3 (xyzrpy). Defaults to 2.
+            ax (np.array matplotlib.axes._subplots.AxesSubplot, length 3): 
+                axis to plot on. Defaults to None.
+            t (np.array, optional): times to plot. Provide this or dt, t0, and tf. 
+                Defaults to None.
+            dt (float, optional): time between plot points if using dt, t0, and tf. 
+                Defaults to 0.1.
+            t0 (float, optional): start time if using dt, t0, and tf to specify time. 
+                Defaults to self.t0.
+            tf (float, optional): end time if using dt, t0, and tf to specify time. 
+                Defaults to self.tf.
+        """
+        assert t is None or (t0 is None and tf is None), "t and t0/tf cannot be given together"
+        if t0 is None and t is None:
+            t0 = self.t0
+        if tf is None and t is None:
+            tf = self.tf
+
+        assert dim == 2 or dim == 3, "dim must be 2 or 3"
+        
+        if ax is None:
+            if dim == 2:
+                fig, ax = plt.subplots(3, 1, figsize=(10, 8))
+            elif dim == 3:
+                fig, ax = plt.subplots(6, 1, figsize=(16, 8))
+            else:
+                assert False, "dim must be 2 or 3"
+        
+        if t is None:
+            t = np.arange(t0, tf, dt)
+
+        xyz = np.array([self.position(ti) for ti in t])
+        rpy = np.array([self.rpy(ti, degrees=True) for ti in t])
+        
+        if dim == 2:
+            start_rot_ax_idx = 2
+            trans_idx = [0, 1]
+            rot_idx = [2]
+        else:
+            start_rot_ax_idx = 3
+            trans_idx = [0, 1, 2]
+            rot_idx = [0, 1, 2]
+
+        for i, label in enumerate([['x (m)', 'y (m)', 'z (m)'][j] for j in trans_idx]):
+            ax[i].plot(t, xyz[:,trans_idx[i]], **kwargs)
+            ax[i].set_ylabel(label)
+
+        for i, label in enumerate(
+                [['roll (deg)', 'pitch (deg)', 'yaw (deg)'][j] for j in rot_idx]):
+            ax[start_rot_ax_idx + i].plot(t, rpy[:,rot_idx[i]], **kwargs)
+            ax[start_rot_ax_idx + i].set_ylabel(label)
+        
+        ax[-1].set_xlabel('time')
+        return ax
+
+
     
     def to_evo(self):
         """
