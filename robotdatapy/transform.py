@@ -98,6 +98,14 @@ def xyz_quat_to_transform(xyz, quat):
     T[:3,3] = xyz.reshape(-1)
     return T
 
+def xyz_rpy_to_transform(xyz, rpy, degrees=False):
+    xyz = np.array(xyz).reshape(-1)
+    rpy = np.array(rpy).reshape(-1)
+    T = np.eye(4)
+    T[:3,:3] = Rot.from_euler('ZYX', rpy[::-1], degrees=degrees).as_matrix()
+    T[:3,3] = xyz
+    return T
+
 def T3d_2_T2d(T3d):
     print("The function T3d_2_T2d is deprecated. " + 
           "Does not handle 3D to 2D conversion properly " +
