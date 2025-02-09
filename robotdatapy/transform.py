@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.spatial.transform import Rotation as Rot
+from scipy.spatial.transform import Rotation as Rot, Slerp
 from typing import List
 
 def transform_vec(T, vec):
@@ -62,7 +62,7 @@ def transform_to_xyzrpy(T, degrees=False):
 
 def transform_to_xyz_quat(T, separate=False):
     """
-    Converts a 4x4 rigid body transformation matrix to a 6D vector of x, y, z, and quaternion (x, y, z, w)
+    Converts a 4x4 rigid body transformation matrix to a 7D vector of x, y, z, and quaternion (x, y, z, w)
 
     Args:
         T (np.array, shape=(4,4)): Rigid body transformation matrix
@@ -180,3 +180,21 @@ def mean(transforms: List[np.ndarray]) -> np.ndarray:
         T[:3,:3] = mean_rot.as_matrix()
         T[:3,3] = mean_t
         return T
+    
+def interpolate_transforms(T0, T1, t: float):
+    """
+    Interpolates two 4x4 rigid body transformation matrices, using LERP for positions and SLERP for rotations
+
+    Args:
+        T0: first transform
+        T1: second transform
+        t: interpolation parameter, 0 corresponds to T0 and 1 corresponds to T1
+
+    Returns:
+        np.ndarray, shape=(4, 4): interpolated transform
+    """
+    assert T0.shape[0] == T0.shape[1] == T1.shape[0] == T1.shape[1] == 4, "must be 4x4 transforms"
+    T = np.eye(4)
+    T[:3, 3] = T0[:3, 3] + t * (T1[:3, 3] - T0[:3, 3])
+    T[:3, :3] = Slerp([0, 1], Rot.from_matrix(np.stack((T0[:3,:3], T1[:3,:3]), axis=0)))([t]).as_matrix()[0]
+    return T
