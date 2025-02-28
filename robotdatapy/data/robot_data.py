@@ -106,11 +106,23 @@ class RobotData():
     
     @classmethod
     def topic_t0(cls, bag, topic):
+        return RobotData._first_topic_t(bag, topic, reverse=False)
+            
+    @classmethod
+    def topic_tf(cls, bag, topic):
+        return RobotData._first_topic_t(bag, topic, reverse=True)
+
+    @classmethod
+    def _first_topic_t(cls, bag, topic, reverse=False):
         with AnyReader([Path(bag)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {bag}"
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+
+            msgs = reader.messages(connections=connections)
+            if reverse: msgs = reversed(list(msgs))
+
+            for (connection, timestamp, rawdata) in msgs:
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 try:
                     t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
