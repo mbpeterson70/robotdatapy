@@ -5,6 +5,10 @@ from pathlib import Path
 
 from robotdatapy.exceptions import NoDataNearTimeException
 
+def maybe_reverse_iterator(itr, flag):
+    if flag: return reversed(list(itr))
+    return itr
+
 class RobotData():
     """
     Parent class for easy access to robotics data over time
@@ -119,13 +123,36 @@ class RobotData():
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {bag}"
 
-            msgs = reader.messages(connections=connections)
-            if reverse: msgs = reversed(list(msgs))
-
-            for (connection, timestamp, rawdata) in msgs:
+            for (connection, timestamp, rawdata) in maybe_reverse_iterator(reader.messages(connections=connections), reverse):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 try:
                     t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
                 except:
                     t = timestamp
                 return t
+
+    @classmethod
+    def topic_t_range(cls, bag, topic):
+        """
+        Get the smallest and largest timestamps of a topic in a bag
+
+        Differs slightly from topic_t0/tf in that the min/max of the timestamps are computed,
+        rather than just taking the first/last timestamp (not guaranteed to be accurate,
+        as they are in recorded order not timestamp order)
+        """
+        first_time, last_time = float('inf'), float('-inf')
+        with AnyReader([Path(bag)]) as reader:
+            connections = [x for x in reader.connections if x.topic == topic]
+            if len(connections) == 0:
+                assert False, f"topic {topic} not found in bag file {bag}"
+
+            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+                msg = reader.deserialize(rawdata, connection.msgtype)
+                try:
+                    t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
+                except:
+                    t = timestamp
+                first_time = min(first_time, t)
+                last_time = max(last_time, t)
+
+        return (first_time, last_time)
