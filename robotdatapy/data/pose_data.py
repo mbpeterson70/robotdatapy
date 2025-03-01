@@ -621,8 +621,10 @@ class PoseData(RobotData):
             if parent_frame_id not in tf_tree:
                 if tf_root is None:
                     tf_root = parent_frame_id
-                else:
-                    assert False, f'static_tf tree has multiple roots in bag file {path}'
+                elif tf_root != parent_frame_id:
+                    assert False, f"tf tree has multiple roots '{tf_root}', '{parent_frame_id}' in bag file {path}"
+
+        assert tf_root != None, f'tf_static tree has no root in bag file {path}'
 
         T_root_f1 = PoseData.static_tf_from_bag(path, tf_root, parent_frame, tf_tree=tf_tree) \
                     if parent_frame != tf_root else np.eye(4)
