@@ -106,6 +106,25 @@ def xyz_rpy_to_transform(xyz, rpy, degrees=False):
     T[:3,3] = xyz
     return T
 
+def R_t_to_transform(R, t):
+    """
+    Generates a 4x4 rigid body transformation matrix from a 3x3 rotation matrix and a 
+        3 dimension translation vector
+
+    Args:
+        t (np.ndarray): 3x3 Rotation matrix
+        R (np.ndarray): 3-dim translation vector
+
+    Returns:
+        np.ndarray: 4x4 Transformation matrix
+    """
+    t = np.array(t).reshape(-1)
+    R = np.array(R).reshape((3,3))
+    T = np.eye(4)
+    T[:3,:3] = R
+    T[:3,3] = t
+    return T
+
 def T3d_2_T2d(T3d):
     print("The function T3d_2_T2d is deprecated. " + 
           "Does not handle 3D to 2D conversion properly " +
