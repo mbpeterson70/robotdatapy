@@ -301,6 +301,20 @@ class PointCloudData(RobotData):
         self.pointclouds = self.pointclouds[idx0:idxf+1]
         return
     
+    def msg_header(self, t: float):
+        """
+        Header of point cloud at time t.
+
+        Args:
+            t (float): time
+
+        Returns:
+            ROS message header
+        """
+        assert self.data_type == 'bag', "must be from a rosbag to have message header"
+        idx = self.idx(t)
+        return self.pointclouds[idx].header
+    
     @property
     def field_names(self):
         """
