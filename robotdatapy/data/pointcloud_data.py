@@ -252,9 +252,13 @@ class PointCloudData(RobotData):
         pcds = []
         with AnyReader([Path(path)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
+            if len(connections) == 0:
+                assert False, f"topic {topic} not found in bag file {path}"
+                
             for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
-
+                if connection.topic != topic:
+                    continue
                 t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
                 if time_range is not None and t < time_range[0]:
                     continue
