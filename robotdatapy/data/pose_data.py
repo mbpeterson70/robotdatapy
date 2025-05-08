@@ -616,22 +616,25 @@ class PoseData(RobotData):
         """  
         tf_tree = cls.static_tf_dict_from_bag(path)
 
-        tf_root = None
+        tf_roots = []
         for _, (parent_frame_id, _) in tf_tree.items():
             if parent_frame_id not in tf_tree:
-                if tf_root is None:
-                    tf_root = parent_frame_id
-                elif tf_root != parent_frame_id:
-                    assert False, f"tf tree has multiple roots '{tf_root}', '{parent_frame_id}' in bag file {path}"
+                tf_roots.append(parent_frame_id)
+               
+        assert len(tf_roots) > 0, f'tf_static tree has no root in bag file {path}'
 
-        assert tf_root != None, f'tf_static tree has no root in bag file {path}'
+        for tf_root in tf_roots:
+            try:
+                T_root_f1 = PoseData.static_tf_from_bag(path, tf_root, parent_frame, tf_tree=tf_tree) \
+                            if parent_frame != tf_root else np.eye(4)
+                T_root_f2 = PoseData.static_tf_from_bag(path, tf_root, child_frame, tf_tree=tf_tree) \
+                            if child_frame != tf_root else np.eye(4)
+                
+                return np.linalg.inv(T_root_f1) @ T_root_f2
+            except:
+                continue
 
-        T_root_f1 = PoseData.static_tf_from_bag(path, tf_root, parent_frame, tf_tree=tf_tree) \
-                    if parent_frame != tf_root else np.eye(4)
-        T_root_f2 = PoseData.static_tf_from_bag(path, tf_root, child_frame, tf_tree=tf_tree) \
-                    if child_frame != tf_root else np.eye(4)
-        
-        return np.linalg.inv(T_root_f1) @ T_root_f2
+        assert False, 'transform lookup failed'
         
     
     @classmethod

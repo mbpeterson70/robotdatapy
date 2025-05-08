@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 
+import cv2
 from robotdatapy.exceptions import MsgNotFound
 
 def pixel_depth_2_xyz(x, y, depth, K):
@@ -83,6 +84,15 @@ class CameraParams:
         except:
             K = np.array(msg.k).reshape((3,3))
             D = np.array(msg.d)
+
+        if np.all(K == 0):
+            print("\n\n\nYES\n\n\n")
+            try:
+                P = np.array(msg.P).reshape((3, 4))
+            except:
+                P = np.array(msg.p).reshape((3, 4))
+            K, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P)
+        
         width = msg.width
         height = msg.height
         if len(D) == 0:
