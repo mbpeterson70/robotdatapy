@@ -14,3 +14,9 @@ def pose_msg_2_transform(pose_msg):
     T[:3,:3] = Rot.from_quat(quat).as_matrix()
     T[:3,3] = position
     return T
+
+def stamp_2_float(stamp):
+    return stamp.sec + stamp.nanosec*1e-9
+
+def stamp_2_nanosec(stamp):
+    return int(stamp.sec*1e9 + stamp.nanosec)

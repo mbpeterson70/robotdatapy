@@ -486,6 +486,27 @@ class PoseData(RobotData):
         """
         return self.T_WB(t)     
     
+    def inv(self):
+        """
+        Returns a PoseData object with inverted poses
+        """
+        interp_original_val = self.interp
+        self.interp = False
+
+        poses_inv = []
+        for ti in self.times:
+            poses_inv.append(np.linalg.inv(self.pose(ti)))
+
+        self.interp = interp_original_val
+
+        return PoseData.from_times_and_poses(
+            times=self.times,
+            poses=poses_inv,
+            interp=self.interp,
+            causal=self.causal,
+            time_tol=self.time_tol,
+        )
+    
     def clip(self, t0, tf):
         """
         Clips the data to be between t0 and tf
