@@ -11,14 +11,8 @@ import cv2
 import pykitti
 from robotdatapy.camera import CameraParams
 from robotdatapy.exceptions import MsgNotFound
+from rosbags.image import message_to_cvimage
 
-# ROS dependencies
-try:
-    import cv_bridge
-except:
-    print("Warning: import cv_bridge failed. Is ROS installed and sourced? " + 
-          "Without cv_bridge, the ImgData class may fail.")    
-        
 class ImgData(RobotData):
     """
     Class for easy access to image data over time
@@ -35,7 +29,7 @@ class ImgData(RobotData):
             t0=None, 
             time_range=None,
             compressed=True,
-            compressed_encoding='passthrough',
+            color_space=None,
             compressed_rvl=False
         ): 
         """
@@ -68,12 +62,11 @@ class ImgData(RobotData):
         
         data_path = os.path.expanduser(os.path.expandvars(data_path)) if data_path is not None else None
         self.compressed = compressed
-        self.compressed_encoding = compressed_encoding
+        self.color_space = color_space
         self.compressed_rvl = compressed_rvl
         self.data_path = data_path
         self.data_type = data_type
         self.interp = False
-        self.bridge = cv_bridge.CvBridge()
         if t0 is not None:
             self.set_t0(t0)
             
@@ -81,7 +74,7 @@ class ImgData(RobotData):
             
     @classmethod
     def from_bag(cls, path, topic, camera_info_topic=None, time_range=None, time_tol=.1, causal=False, 
-                 t0=None, compressed=True, compressed_encoding='passthrough', compressed_rvl=False):
+                 t0=None, compressed=True,  color_space=None, compressed_rvl=False):
         """
         Creates ImgData object from bag file
 
@@ -127,14 +120,14 @@ class ImgData(RobotData):
 
         img_data = cls(times=times, imgs=img_msgs, data_type='bag',  data_path=path, 
                    time_tol=time_tol, causal=causal, t0=t0, compressed=compressed, 
-                   compressed_encoding=compressed_encoding, compressed_rvl=compressed_rvl)
+                   color_space=color_space, compressed_rvl=compressed_rvl)
         if camera_info_topic is not None:
             img_data.extract_params(camera_info_topic)
         return img_data
 
     @classmethod
     def from_kitti(cls, path, kitti_type, kitti_sequence='00', time_range=None, time_tol=.1, causal=False, 
-                 t0=None, compressed=True, compressed_encoding='passthrough', compressed_rvl=False):
+                 t0=None, compressed=True, color_space='passthrough', compressed_rvl=False):
         """
         Creates ImgData object from bag file
 
@@ -164,7 +157,7 @@ class ImgData(RobotData):
 
         img_data = cls(times=times, imgs=dataset, data_type='kitti',  data_path=path,
                        time_tol=time_tol, causal=causal, t0=t0, compressed=compressed, 
-                       compressed_encoding=compressed_encoding, compressed_rvl=compressed_rvl)
+                       color_space=color_space, compressed_rvl=compressed_rvl)
         img_data.kitti_type = kitti_type
         img_data.kitti_depth_img_path = data_file + '/sequences/' + kitti_sequence  + '/depth/'
         return img_data
@@ -340,7 +333,7 @@ class ImgData(RobotData):
         """
         if self.data_type == 'bag' or self.data_type == 'bag2':
             if not self.compressed:
-                img = self.bridge.imgmsg_to_cv2(self.imgs[idx], desired_encoding=self.compressed_encoding)
+                img = message_to_cvimage(self.imgs[idx], color_space=self.color_space)
             elif self.compressed_rvl:
                 from rvl import decompress_rvl
                 assert self.width is not None and self.height is not None
@@ -348,7 +341,7 @@ class ImgData(RobotData):
                     np.array(self.imgs[idx].data[20:]).astype(np.int8), 
                     self.height*self.width).reshape((self.height, self.width))
             else:
-                img = self.bridge.compressed_imgmsg_to_cv2(self.imgs[idx], desired_encoding=self.compressed_encoding)
+                img = message_to_cvimage(self.imgs[idx], color_space=self.color_space)
                 
         elif self.data_type == 'kitti' and self.kitti_type == 'rgb':
             pil_image = self.imgs.get_cam2(idx)
