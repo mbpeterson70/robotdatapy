@@ -86,7 +86,6 @@ class CameraParams:
             D = np.array(msg.d)
 
         if np.all(K == 0):
-            print("\n\n\nYES\n\n\n")
             try:
                 P = np.array(msg.P).reshape((3, 4))
             except:
