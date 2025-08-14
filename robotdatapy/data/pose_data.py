@@ -722,6 +722,9 @@ class PoseData(RobotData):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
                     for transform_msg in msg.transforms:
+                        # ignore a transform from a frame to itself
+                        if transform_msg.header.frame_id == transform_msg.child_frame_id: 
+                            continue
                         tf_tree[transform_msg.child_frame_id] = (transform_msg.header.frame_id, transform_msg.transform)
         return tf_tree
     
