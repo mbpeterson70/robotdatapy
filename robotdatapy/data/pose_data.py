@@ -655,7 +655,7 @@ class PoseData(RobotData):
             except:
                 continue
 
-        assert False, 'transform lookup failed'
+        assert False, f'transform lookup from {parent_frame} to {child_frame} failed'
         
     
     @classmethod
