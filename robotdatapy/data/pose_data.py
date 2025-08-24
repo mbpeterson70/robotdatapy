@@ -67,6 +67,9 @@ class PoseData(RobotData):
         self.set_times(np.array(times))
         self.positions = np.array(positions)
         self.orientations = np.array(orientations)
+        self.untransformed_poses = np.tile(np.eye(4), (len(self.times), 1, 1))
+        self.untransformed_poses[:, :3, :3] = Rot.from_quat(self.orientations).as_matrix()
+        self.untransformed_poses[:, :3, 3] = self.positions
         if t0 is not None:
             self.set_t0(t0)
         self.T_premultiply = T_premultiply
@@ -474,7 +477,7 @@ class PoseData(RobotData):
                 T_WB = T_WB @ self.T_postmultiply
         return T_WB
     
-    def pose(self, t):
+    def pose(self, t, multiply=True):
         """
         Pose at time t.
 
@@ -484,8 +487,16 @@ class PoseData(RobotData):
         Returns:
             np.array, shape(4,4): Rigid body transform
         """
-        return self.T_WB(t)     
+        return self.T_WB(t, multiply=multiply)
     
+    def all_poses(self, multiply: bool = True) -> np.ndarray:
+        poses = self.untransformed_poses
+        if self.T_premultiply is not None:
+            poses = np.einsum('ij,njk->nik', self.T_premultiply, poses, optimize=True)
+        if self.T_postmultiply is not None:
+            poses = np.einsum('nij,jk->nik', poses, self.T_postmultiply, optimize=True)
+        return poses
+
     def inv(self):
         """
         Returns a PoseData object with inverted poses
@@ -611,13 +622,23 @@ class PoseData(RobotData):
         """
         assert csv_options == KIMERA_MULTI_GT_CSV_OPTIONS, \
             "Only KIMERA_MULTI_GT_CSV_OPTIONS is supported"
-        data = [csv_options['cols']['time'] + csv_options['cols']['position'] \
+        data_headers = [csv_options['cols']['time'] + csv_options['cols']['position'] \
             + csv_options['cols']['orientation']]
-        for t in self.times:
-            data.append([int(t/csv_options['timescale'])] + self.position(t).tolist() + 
-                        [self.orientation(t)[3]] + self.orientation(t)[:3].tolist())
+        transforms = self.all_poses()
+        orientations = Rot.from_matrix(transforms[:,:3,:3]).as_quat()
+        times = (self.times / csv_options['timescale']).astype(np.int64)
+        data_names = f"{csv_options['cols']['time'][0]}"
+        for p in csv_options['cols']['position']:
+            data_names += f",{p}"
+        for o in csv_options['cols']['orientation']:
+            data_names += f",{o}"
+        data = np.rec.fromarrays([times, transforms[:,0,3], transforms[:,1,3], transforms[:,2,3], 
+                        orientations[:,3], orientations[:,0], orientations[:,1], orientations[:,2]], 
+                        names=data_names)
+        
         with open(path, 'w') as f:
             writer = csv.writer(f)
+            writer.writerow(data.dtype.names)
             writer.writerows(data)
 
     @classmethod
