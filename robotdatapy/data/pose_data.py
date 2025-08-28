@@ -25,6 +25,7 @@ import cv2
 import evo
 import csv
 import yaml
+from typing import List
 
 from robotdatapy.data.robot_data import RobotData
 
@@ -557,11 +558,6 @@ class PoseData(RobotData):
         if ax is None:
             ax = plt.gca()
 
-        if t0 is None and t is None:
-            t0 = self.t0
-        if tf is None and t is None:
-            tf = self.tf
-
         assert len(axes) == 2, "axes must be a string of length 2"
         ax_idx = []
         for i in range(2):
@@ -574,17 +570,12 @@ class PoseData(RobotData):
             else:
                 assert False, "axes must be a string of x, y, or z"
 
+        t = self._get_time_array(t=t, dt=dt, t0=t0, tf=tf)
+
         if trajectory:
-            if t is None:
-                positions = np.array([self.position(ti) for ti in np.arange(t0, tf, dt)])
-            else:
-                positions = np.array([self.position(ti) for ti in t])
+            positions = np.array([self.position(ti) for ti in t])
             ax.plot(positions[:,ax_idx[0]], positions[:,ax_idx[1]], **kwargs)
         if pose:
-            if t is not None:
-                t = t #[t]
-            else:
-                t = np.arange(t0, tf, dt)
             for ti in t:
                 for rob_ax, color in zip([0, 1, 2], ['red', 'green', 'blue']):
                     T_WB = self.T_WB(ti)
@@ -597,6 +588,53 @@ class PoseData(RobotData):
         ax.grid(True)
         return ax
     
+    def plot3d(self, ax=None, dt: float = .1, t: List[float] = None, t0: float = None, 
+            tf: float = None, pose: bool = False, trajectory: bool = True, axis_len: float = 1.0):
+        """
+        Creates a 3D plot of the pose data
+
+        Args:
+            ax (Matplotlib axis, optional): Axis on which to plot. If set to None, creates new 
+                axis. Defaults to None.
+            dt (float, optional): Time separation between points if t is not provided.
+                Defaults to .1.
+            t (List[float], optional): List of times to plot points. Defaults to None.
+            t0 (float, optional): First point to plot. If t0 and t are not provided, uses 
+                PoseData's t0. Defaults to None.
+            tf (float, optional): Last point to plot. If tf and t are not provided, uses 
+                PoseData's tf. Defaults to None.
+            pose (bool, optional): Whether to plot poses (as coordinate frames). Defaults to False.
+            trajectory (bool, optional): Whether to plot the trajectory as points. Defaults to 
+                True.
+            axis_len (float, optional): Length of the axes of coordinate frames if plotting poses. 
+                Defaults to 1.0.
+
+        Returns:
+            Matplotlib axis: axis on which plotting was done
+        """
+        
+        if ax is None:
+            ax = plt.figure().add_subplot(projection='3d')
+        t = self._get_time_array(t=t, dt=dt, t0=t0, tf=tf)
+        
+        if trajectory:
+            positions = np.array([self.position(ti) for ti in t])
+            ax.plot(positions[:,0], positions[:,1], positions[:,2])
+            
+        if pose:
+            for ti in t:
+                for rob_ax, color in zip([0, 1, 2], ['red', 'green', 'blue']):
+                    T_WB = self.T_WB(ti)
+                    ax.plot([T_WB[0,3], T_WB[0,3] + axis_len*T_WB[0,rob_ax]], 
+                            [T_WB[1,3], T_WB[1,3] + axis_len*T_WB[1,rob_ax]], 
+                            [T_WB[2,3], T_WB[2,3] + axis_len*T_WB[2,rob_ax]], 
+                            color=color)
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_zlabel('z')
+        ax.set_aspect('equal')
+        return ax
+
     def to_evo(self):
         """
         Converts the PoseData object to an evo PoseTrajectory3D object.
@@ -816,3 +854,30 @@ class PoseData(RobotData):
                                                  transform_msg.transform.rotation.z, 
                                                  transform_msg.transform.rotation.w])
         return cls(times, positions, orientations, **kwargs)
+    
+    def _get_time_array(self, t: List[float], dt: float, t0: float, tf: float) -> np.ndarray:
+        """
+        Given some timing options, a numpy array of times (e.g., used for plotting) are returned
+
+        Args:
+            t (List[float]): If a list of floats (times) are provided, this will just be returned
+                as is.
+            dt (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
+                is returned.
+            t0 (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
+                is returned.
+            tf (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
+                is returned.
+
+        Returns:
+            np.ndarray: List of times
+        """
+        if t0 is None and t is None:
+            t0 = self.t0
+        if tf is None and t is None:
+            tf = self.tf
+            
+        if t is not None:
+            return t
+        else:
+            return np.arange(t0, tf, dt)
