@@ -424,7 +424,7 @@ class PoseData(RobotData):
         """
         idx = self.idx(t)
         if self.interp:
-            if idx[0] == idx[1]:
+            if idx[0] == idx[1] or self.times[idx[0]] == self.times[idx[1]]:
                 position = self.positions[idx[0]]
             else:
                 position = self.positions[idx[0]] + \
@@ -446,7 +446,7 @@ class PoseData(RobotData):
         """
         idx = self.idx(t)        
         if self.interp:
-            if idx[0] == idx[1]:
+            if idx[0] == idx[1] or self.times[idx[0]] == self.times[idx[1]]:
                 return self.orientations[idx[0]]
             orientations = Rot.from_quat(self.orientations[idx])
             slerp = Slerp(self.times[idx], orientations)
