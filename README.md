@@ -47,8 +47,8 @@ To quickly plot the trajectory of a robot for example, you can run the following
 ```python
 import robotdatapy as rdp
 
-bag_path = <path to bag>
-topic = <Odometry or Pose msg>
+bag_path = # path to bag
+topic = # Odometry or Pose msg
 pose_data = rdp.data.PoseData.from_bag(bag_path, topic=topic, interp=True)
 
 pose_data.plot2d(dt=1.0, trajectory=True, pose=False)     # plots only position every second
@@ -66,9 +66,12 @@ Here's an example of loading and viewing an image from a ROS bag:
 ```python
 import robotdatapy as rdp
 
+bag_path = # add ROS 1/2 bag path
+topic = # camera image topic
+
 img_data = rdp.data.ImgData.from_bag(
     bag_path,
-    topic=<camera image topic>
+    topic=topic
     compressed=True # tells the loader that the images are ROS CompressedImage messages
 )
 
@@ -82,9 +85,12 @@ PointCloudData can be loaded from ROS1/2 bags. Tools exist in `robotdatapy` to m
 ```python
 import robotdatapy as rdp
 
+bag_path = # ROS 1/2 bag path
+topic = # ROS point cloud topic
+
 ptcld_data = rdp.data.PointCloudData.from_bag(
-    <ROS bag path>,
-    topic=<ROS point cloud topic>,
+    bag_path,
+    topic=topic,
 )
 ```
 

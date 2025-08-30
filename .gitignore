@@ -1,3 +1,7 @@
+# tutorial created files
+examples/point_cloud_viz.mp4
+examples/wheel_odom_pose.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
