@@ -2,7 +2,7 @@
 
 Welcome to `robotdatapy`! At its core, `robotdatapy` is a package designed to make accessing and manipulating robot/geometric data easy in Python.
 
-![annotated_point_cloud](./media/annotated_point_cloud.png)
+<img src="./media/annotated_point_cloud.png" alt="annotated_point_cloud" width="500"/>
 
 ## Install
 
@@ -20,7 +20,7 @@ cd robotdatapy
 pip install .
 ```
 
-## Tutorial
+## [Introduction Tutorial](./examples/intro_tutorial.ipynb)
 
 The best way to get familiar with `robotdatapy` is through the introductory tutorial, accessible [here](./examples/intro_tutorial.ipynb).
 
