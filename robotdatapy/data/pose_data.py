@@ -25,6 +25,7 @@ import cv2
 import evo
 import csv
 import yaml
+from typing import List
 
 from robotdatapy.data.robot_data import RobotData
 
@@ -67,6 +68,9 @@ class PoseData(RobotData):
         self.set_times(np.array(times))
         self.positions = np.array(positions)
         self.orientations = np.array(orientations)
+        self.untransformed_poses = np.tile(np.eye(4), (len(self.times), 1, 1))
+        self.untransformed_poses[:, :3, :3] = Rot.from_quat(self.orientations).as_matrix()
+        self.untransformed_poses[:, :3, 3] = self.positions
         if t0 is not None:
             self.set_t0(t0)
         self.T_premultiply = T_premultiply
@@ -420,7 +424,7 @@ class PoseData(RobotData):
         """
         idx = self.idx(t)
         if self.interp:
-            if idx[0] == idx[1]:
+            if idx[0] == idx[1] or self.times[idx[0]] == self.times[idx[1]]:
                 position = self.positions[idx[0]]
             else:
                 position = self.positions[idx[0]] + \
@@ -442,7 +446,7 @@ class PoseData(RobotData):
         """
         idx = self.idx(t)        
         if self.interp:
-            if idx[0] == idx[1]:
+            if idx[0] == idx[1] or self.times[idx[0]] == self.times[idx[1]]:
                 return self.orientations[idx[0]]
             orientations = Rot.from_quat(self.orientations[idx])
             slerp = Slerp(self.times[idx], orientations)
@@ -474,7 +478,7 @@ class PoseData(RobotData):
                 T_WB = T_WB @ self.T_postmultiply
         return T_WB
     
-    def pose(self, t):
+    def pose(self, t, multiply=True):
         """
         Pose at time t.
 
@@ -484,8 +488,16 @@ class PoseData(RobotData):
         Returns:
             np.array, shape(4,4): Rigid body transform
         """
-        return self.T_WB(t)     
+        return self.T_WB(t, multiply=multiply)
     
+    def all_poses(self, multiply: bool = True) -> np.ndarray:
+        poses = self.untransformed_poses
+        if self.T_premultiply is not None:
+            poses = np.einsum('ij,njk->nik', self.T_premultiply, poses, optimize=True)
+        if self.T_postmultiply is not None:
+            poses = np.einsum('nij,jk->nik', poses, self.T_postmultiply, optimize=True)
+        return poses
+
     def inv(self):
         """
         Returns a PoseData object with inverted poses
@@ -546,11 +558,6 @@ class PoseData(RobotData):
         if ax is None:
             ax = plt.gca()
 
-        if t0 is None and t is None:
-            t0 = self.t0
-        if tf is None and t is None:
-            tf = self.tf
-
         assert len(axes) == 2, "axes must be a string of length 2"
         ax_idx = []
         for i in range(2):
@@ -563,17 +570,12 @@ class PoseData(RobotData):
             else:
                 assert False, "axes must be a string of x, y, or z"
 
+        t = self._get_time_array(t=t, dt=dt, t0=t0, tf=tf)
+
         if trajectory:
-            if t is None:
-                positions = np.array([self.position(ti) for ti in np.arange(t0, tf, dt)])
-            else:
-                positions = np.array([self.position(ti) for ti in t])
+            positions = np.array([self.position(ti) for ti in t])
             ax.plot(positions[:,ax_idx[0]], positions[:,ax_idx[1]], **kwargs)
         if pose:
-            if t is not None:
-                t = t #[t]
-            else:
-                t = np.arange(t0, tf, dt)
             for ti in t:
                 for rob_ax, color in zip([0, 1, 2], ['red', 'green', 'blue']):
                     T_WB = self.T_WB(ti)
@@ -586,6 +588,53 @@ class PoseData(RobotData):
         ax.grid(True)
         return ax
     
+    def plot3d(self, ax=None, dt: float = .1, t: List[float] = None, t0: float = None, 
+            tf: float = None, pose: bool = False, trajectory: bool = True, axis_len: float = 1.0):
+        """
+        Creates a 3D plot of the pose data
+
+        Args:
+            ax (Matplotlib axis, optional): Axis on which to plot. If set to None, creates new 
+                axis. Defaults to None.
+            dt (float, optional): Time separation between points if t is not provided.
+                Defaults to .1.
+            t (List[float], optional): List of times to plot points. Defaults to None.
+            t0 (float, optional): First point to plot. If t0 and t are not provided, uses 
+                PoseData's t0. Defaults to None.
+            tf (float, optional): Last point to plot. If tf and t are not provided, uses 
+                PoseData's tf. Defaults to None.
+            pose (bool, optional): Whether to plot poses (as coordinate frames). Defaults to False.
+            trajectory (bool, optional): Whether to plot the trajectory as points. Defaults to 
+                True.
+            axis_len (float, optional): Length of the axes of coordinate frames if plotting poses. 
+                Defaults to 1.0.
+
+        Returns:
+            Matplotlib axis: axis on which plotting was done
+        """
+        
+        if ax is None:
+            ax = plt.figure().add_subplot(projection='3d')
+        t = self._get_time_array(t=t, dt=dt, t0=t0, tf=tf)
+        
+        if trajectory:
+            positions = np.array([self.position(ti) for ti in t])
+            ax.plot(positions[:,0], positions[:,1], positions[:,2])
+            
+        if pose:
+            for ti in t:
+                for rob_ax, color in zip([0, 1, 2], ['red', 'green', 'blue']):
+                    T_WB = self.T_WB(ti)
+                    ax.plot([T_WB[0,3], T_WB[0,3] + axis_len*T_WB[0,rob_ax]], 
+                            [T_WB[1,3], T_WB[1,3] + axis_len*T_WB[1,rob_ax]], 
+                            [T_WB[2,3], T_WB[2,3] + axis_len*T_WB[2,rob_ax]], 
+                            color=color)
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_zlabel('z')
+        ax.set_aspect('equal')
+        return ax
+
     def to_evo(self):
         """
         Converts the PoseData object to an evo PoseTrajectory3D object.
@@ -611,13 +660,23 @@ class PoseData(RobotData):
         """
         assert csv_options == KIMERA_MULTI_GT_CSV_OPTIONS, \
             "Only KIMERA_MULTI_GT_CSV_OPTIONS is supported"
-        data = [csv_options['cols']['time'] + csv_options['cols']['position'] \
+        data_headers = [csv_options['cols']['time'] + csv_options['cols']['position'] \
             + csv_options['cols']['orientation']]
-        for t in self.times:
-            data.append([int(t/csv_options['timescale'])] + self.position(t).tolist() + 
-                        [self.orientation(t)[3]] + self.orientation(t)[:3].tolist())
+        transforms = self.all_poses()
+        orientations = Rot.from_matrix(transforms[:,:3,:3]).as_quat()
+        times = (self.times / csv_options['timescale']).astype(np.int64)
+        data_names = f"{csv_options['cols']['time'][0]}"
+        for p in csv_options['cols']['position']:
+            data_names += f",{p}"
+        for o in csv_options['cols']['orientation']:
+            data_names += f",{o}"
+        data = np.rec.fromarrays([times, transforms[:,0,3], transforms[:,1,3], transforms[:,2,3], 
+                        orientations[:,3], orientations[:,0], orientations[:,1], orientations[:,2]], 
+                        names=data_names)
+        
         with open(path, 'w') as f:
             writer = csv.writer(f)
+            writer.writerow(data.dtype.names)
             writer.writerows(data)
 
     @classmethod
@@ -795,3 +854,30 @@ class PoseData(RobotData):
                                                  transform_msg.transform.rotation.z, 
                                                  transform_msg.transform.rotation.w])
         return cls(times, positions, orientations, **kwargs)
+    
+    def _get_time_array(self, t: List[float], dt: float, t0: float, tf: float) -> np.ndarray:
+        """
+        Given some timing options, a numpy array of times (e.g., used for plotting) are returned
+
+        Args:
+            t (List[float]): If a list of floats (times) are provided, this will just be returned
+                as is.
+            dt (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
+                is returned.
+            t0 (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
+                is returned.
+            tf (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
+                is returned.
+
+        Returns:
+            np.ndarray: List of times
+        """
+        if t0 is None and t is None:
+            t0 = self.t0
+        if tf is None and t is None:
+            tf = self.tf
+            
+        if t is not None:
+            return t
+        else:
+            return np.arange(t0, tf, dt)

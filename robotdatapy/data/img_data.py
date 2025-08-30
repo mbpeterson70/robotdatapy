@@ -205,7 +205,6 @@ class ImgData(RobotData):
         for t in self.times:
             out.write(self.img(t))
         out.release()
-        cv2.destroyAllWindows()
         return
 
     def to_zip(self, path):
