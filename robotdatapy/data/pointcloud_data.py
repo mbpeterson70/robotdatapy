@@ -46,6 +46,7 @@ sensor_msgs/src/sensor_msgs/point_cloud2.py
 import os, sys
 import numpy as np
 from rosbags.highlevel import AnyReader
+from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from pathlib import Path
 
 from robotdatapy.data.robot_data import RobotData
@@ -159,6 +160,38 @@ class PointCloud:
         fields = dict(points.dtype.fields)
 
         return cls(header=cloud.header, height=cloud.height, width=cloud.width, fields=fields, points=points)
+
+    @classmethod
+    def from_livox_msg(cls, livox_msg):
+        num_points = livox_msg.point_num
+        fields = ['x', 'y', 'z', 'reflectivity', 'offset_time']
+         # Define the dtype for numpy structured array
+        dtype = np.dtype([
+            ('x', np.float32),
+            ('y', np.float32),
+            ('z', np.float32),
+            ('reflectivity', np.uint8),
+            ('offset_time', np.uint32),
+        ])
+
+        # Allocate structured numpy array
+        points = np.empty(num_points, dtype=dtype)
+
+        # Fill from ROS message fields
+        for i, p in enumerate(livox_msg.points):
+            points[i] = (p.x, p.y, p.z, p.reflectivity, p.offset_time)
+
+        fields = dict(points.dtype.fields)
+
+        return cls(
+            header=livox_msg.header,
+            height=1,                 # Livox cloud is unorganized
+            width=num_points,
+            fields=fields,
+            points=points
+        )
+        
+        
     
     def extract_fields(self, fields):
         """
@@ -228,7 +261,12 @@ class PointCloudData(RobotData):
         if t0 is not None:
             self.set_t0(t0)
 
-        self.fields = None if len(self.pointclouds) == 0 else PointCloud.from_msg(self.pointclouds[0]).fields
+        if len(self.pointclouds) == 0:
+            self.fields = None  
+        elif self.data_type == 'bag':
+            PointCloud.from_msg(self.pointclouds[0]).fields
+        elif self.data_type == 'bag_livox':
+            PointCloud.from_livox_msg(self.pointclouds[0]).fields
 
     @classmethod
     def from_bag(cls, path, topic, causal=False, time_tol=.1, t0=None, time_range=None):
@@ -273,6 +311,62 @@ class PointCloudData(RobotData):
 
         return cls(times=times, pointclouds=pcds, data_type='bag', data_path=path, 
                     causal=causal, time_tol=time_tol, t0=t0, time_range=time_range)
+
+    @classmethod
+    def from_bag_livox(cls, path, topic, path_to_livox_msgs, ros_distro=None, 
+                       time_range=None, **kwargs):
+        """
+        Creates PointCloudData object from ROS1/ROS2 bag file using livox_ros_driver msgs
+
+        Args:
+            path (str): Path to bag
+            topic (str): Topic name
+            path_to_livox_msgs (str): Path to livox msgs `msg` directory
+            ros_distro (str, optional): ROS Distro: ['foxy', 'humble', 'jazzy']. Defaults to 'jazzy'.
+        """
+        if ros_distro is None:
+            typestore = None
+        elif ros_distro == 'foxy':
+            typestore = get_typestore(Stores.ROS2_FOXY)
+        elif ros_distro == 'humble':
+            typestore = get_typestore(Stores.ROS2_HUMBLE)
+        elif ros_distro == 'jazzy':
+            typestore = get_typestore(Stores.ROS2_JAZZY)
+        else:
+            raise ValueError("ros_distro must be one of ['foxy']")
+        
+        custom_msg_types = ['livox_ros_driver2/msg/CustomPoint', 'livox_ros_driver2/msg/CustomMsg']
+        custom_msg_paths = [f"{path_to_livox_msgs}/CustomPoint.msg",
+                            f"{path_to_livox_msgs}/CustomMsg.msg"]
+        typestore = cls._register_custom_msg_types(custom_msg_types, custom_msg_paths, typestore)
+
+        times = []
+        pcds = []
+
+        with AnyReader([Path(path)], default_typestore=typestore) as reader:
+            connections = [x for x in reader.connections if x.topic == topic]
+            if len(connections) == 0:
+                assert False, f"topic {topic} not found in bag file {path}"
+                
+            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+                msg = reader.deserialize(rawdata, connection.msgtype)
+                if connection.topic != topic:
+                    continue
+                t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
+                if time_range is not None and t < time_range[0]:
+                    continue
+                elif time_range is not None and t > time_range[1]:
+                    break
+                times.append(t)
+
+                pcds.append(msg)
+
+        pcds = [msg for _, msg in sorted(zip(times, pcds), key=lambda zipped: zipped[0])]
+        times = sorted(times)
+
+        return cls(times=times, pointclouds=pcds, data_type='bag_livox', data_path=path, 
+                    time_range=time_range, **kwargs)
+
     
     def pointcloud(self, t: float):
         """
@@ -285,7 +379,10 @@ class PointCloudData(RobotData):
             PointCloud
         """
         idx = self.idx(t)
-        return PointCloud.from_msg(self.pointclouds[idx])     
+        if self.data_type == 'bag':
+            return PointCloud.from_msg(self.pointclouds[idx])     
+        elif self.data_type == 'bag_livox':
+            return PointCloud.from_livox_msg(self.pointclouds[idx])
     
     def clip(self, t0: float, tf: float):
         """
