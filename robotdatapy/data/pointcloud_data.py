@@ -62,6 +62,17 @@ _DATATYPES = {
     'FLOAT64': np.dtype(np.float64)
 }
 
+_POINT_FIELD_DATATYPES = {
+    1: 'INT8',
+    2: 'UINT8',
+    3: 'INT16',
+    4: 'UINT16',
+    5: 'INT32',
+    6: 'UINT32',
+    7: 'FLOAT32',
+    8: 'FLOAT64',
+}
+
 DUMMY_FIELD_PREFIX = 'unnamed_field'
 
 def dtype_from_fields(fields, point_step=None) -> np.dtype:
@@ -82,9 +93,12 @@ def dtype_from_fields(fields, point_step=None) -> np.dtype:
     for i, field in enumerate(fields):
         # Datatype as numpy datatype
         datatype = None
-        for k,v in field.__dict__.items():
-            if k in _DATATYPES.keys() and v == field.datatype:
-                datatype = _DATATYPES[k]
+        if hasattr(field, '__dict__'):
+            for k,v in field.__dict__.items():
+                if k in _DATATYPES.keys() and v == field.datatype:
+                    datatype = _DATATYPES[k]
+        else:
+            datatype = _DATATYPES[_POINT_FIELD_DATATYPES.get(field.datatype, None)]
         assert datatype is not None, 'field has no recognized datatype'
 
         # Name field
