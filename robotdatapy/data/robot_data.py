@@ -1,6 +1,7 @@
 import numpy as np
 
 from rosbags.highlevel import AnyReader
+from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from pathlib import Path
 
 from robotdatapy.exceptions import NoDataNearTimeException
@@ -156,3 +157,21 @@ class RobotData():
                 last_time = max(last_time, t)
 
         return (first_time, last_time)
+    
+    @classmethod
+    def _register_custom_msg_types(cls, custom_msg_types, custom_msg_paths, typestore):
+        """
+        Registers custom message types for ROS serialization.
+
+        Args:
+            custom_msg_types (str/List(str)): A list of custom message types used in the bag file data.
+        """
+        if isinstance(custom_msg_types, str):
+            custom_msg_types = [custom_msg_types]
+        if isinstance(custom_msg_paths, str):
+            custom_msg_paths = [custom_msg_paths]
+        add_types = {}
+        for msg_type, msg_path in zip(custom_msg_types, custom_msg_paths):
+            add_types.update(get_types_from_msg(Path(msg_path).read_text(), msg_type)) 
+        typestore.register(add_types)
+        return typestore

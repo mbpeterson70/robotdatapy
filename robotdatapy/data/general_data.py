@@ -65,8 +65,10 @@ class GeneralData(RobotData):
             typestore = get_typestore(Stores.ROS2_FOXY)
         elif ros_distro == 'humble':
             typestore = get_typestore(Stores.ROS2_HUMBLE)
+        elif ros_distro == 'jazzy':
+            typestore = get_typestore(Stores.ROS2_JAZZY)
         else:
-            raise ValueError("ros_distro must be one of ['foxy']")
+            raise ValueError("ros_distro must be one of ['foxy', 'humble', 'jazzy']")
         if custom_msg_types is not None:
             typestore = cls._register_custom_msg_types(custom_msg_types, custom_msg_paths, typestore)
         bag_file = os.path.expanduser(os.path.expandvars(path))
@@ -90,24 +92,6 @@ class GeneralData(RobotData):
                          item = getattr(item, attr)
                 data.append(item)
         return cls(data, times, **kwargs)
-            
-    @classmethod
-    def _register_custom_msg_types(cls, custom_msg_types, custom_msg_paths, typestore):
-        """
-        Registers custom message types for ROS serialization.
-
-        Args:
-            custom_msg_types (str/List(str)): A list of custom message types used in the bag file data.
-        """
-        if isinstance(custom_msg_types, str):
-            custom_msg_types = [custom_msg_types]
-        if isinstance(custom_msg_paths, str):
-            custom_msg_paths = [custom_msg_paths]
-        add_types = {}
-        for msg_type, msg_path in zip(custom_msg_types, custom_msg_paths):
-            add_types.update(get_types_from_msg(Path(msg_path).read_text(), msg_type)) 
-        typestore.register(add_types)
-        return typestore
             
     def data(self, t):
         """

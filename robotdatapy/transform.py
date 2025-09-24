@@ -42,7 +42,7 @@ def transform_to_xytheta(T):
     psi = Rot.from_matrix(T[:3,:3]).as_euler('xyz', degrees=False)[2]
     return x, y, psi
 
-def transform_to_xyzrpy(T, degrees=False):
+def transform_to_xyz_rpy(T, degrees=False, separate=False):
     """
     Converts a 4x4 rigid body transformation matrix to a 6D vector of x, y, z, roll, pitch, yaw
 
@@ -58,7 +58,15 @@ def transform_to_xyzrpy(T, degrees=False):
     xyzrpy = np.zeros(6)
     xyzrpy[:3] = T[:3,3]
     xyzrpy[3:] = Rot.from_matrix(T[:3,:3]).as_euler('ZYX', degrees=degrees)[::-1]
-    return xyzrpy
+    if separate:
+        return xyzrpy[:3], xyzrpy[3:]
+    else:
+        return xyzrpy
+    
+def transform_to_xyzrpy(*args, **kwargs):
+    import warnings
+    warnings.warn("transform_to_xyzrpy is deprecated. Use transform_to_xyz_rpy instead.", DeprecationWarning)
+    return transform_to_xyz_rpy(*args, **kwargs)
 
 def transform_to_xyz_quat(T, separate=False):
     """
