@@ -278,9 +278,9 @@ class PointCloudData(RobotData):
         if len(self.pointclouds) == 0:
             self.fields = None  
         elif self.data_type == 'bag':
-            PointCloud.from_msg(self.pointclouds[0]).fields
+            self.fields = PointCloud.from_msg(self.pointclouds[0]).fields
         elif self.data_type == 'bag_livox':
-            PointCloud.from_livox_msg(self.pointclouds[0]).fields
+            self.fields = PointCloud.from_livox_msg(self.pointclouds[0]).fields
 
     @classmethod
     def from_bag(cls, path, topic, causal=False, time_tol=.1, t0=None, time_range=None):
@@ -347,7 +347,7 @@ class PointCloudData(RobotData):
         elif ros_distro == 'jazzy':
             typestore = get_typestore(Stores.ROS2_JAZZY)
         else:
-            raise ValueError("ros_distro must be one of ['foxy']")
+            raise ValueError("ros_distro must be one of ['foxy', 'humble', 'jazzy']")
         
         custom_msg_types = ['livox_ros_driver2/msg/CustomPoint', 'livox_ros_driver2/msg/CustomMsg']
         custom_msg_paths = [f"{path_to_livox_msgs}/CustomPoint.msg",

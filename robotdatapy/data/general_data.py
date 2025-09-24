@@ -65,8 +65,10 @@ class GeneralData(RobotData):
             typestore = get_typestore(Stores.ROS2_FOXY)
         elif ros_distro == 'humble':
             typestore = get_typestore(Stores.ROS2_HUMBLE)
+        elif ros_distro == 'jazzy':
+            typestore = get_typestore(Stores.ROS2_JAZZY)
         else:
-            raise ValueError("ros_distro must be one of ['foxy']")
+            raise ValueError("ros_distro must be one of ['foxy', 'humble', 'jazzy']")
         if custom_msg_types is not None:
             typestore = cls._register_custom_msg_types(custom_msg_types, custom_msg_paths, typestore)
         bag_file = os.path.expanduser(os.path.expandvars(path))
