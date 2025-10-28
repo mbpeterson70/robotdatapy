@@ -386,7 +386,7 @@ class PoseData(RobotData):
     
     @classmethod
     def from_gps_and_local_pose_estimates(cls, gps_data, local_pose_estimate, 
-            estimate_rot_sig_deg=0.5, estimate_tran_sig_m=0.1):
+            estimate_rot_sig_deg=0.5, estimate_tran_sig_m=0.1, max_gps_sigma=np.inf):
         """
         Fuses GPS data with local pose estimates to create a global PoseData object.
 
@@ -397,8 +397,9 @@ class PoseData(RobotData):
         Returns:
             PoseData: Global PoseData object
         """
+        estimate_rot_sig_rad = np.deg2rad(estimate_rot_sig_deg)
         estimate_noise = gtsam.noiseModel.Diagonal.Sigmas(
-            np.array([estimate_rot_sig_deg, estimate_rot_sig_deg, estimate_rot_sig_deg, 
+            np.array([estimate_rot_sig_rad, estimate_rot_sig_rad, estimate_rot_sig_rad, 
                       estimate_tran_sig_m, estimate_tran_sig_m, estimate_tran_sig_m]))
         graph = gtsam.NonlinearFactorGraph()
 
@@ -421,9 +422,12 @@ class PoseData(RobotData):
             altitude = gps_data.altitude(t_j)
             idx_gtsam = local_pose_estimate.idx(t_j, force_single=True)
             covariance = gps_data.covariance(t_j)
+
+            max_sigma = np.sqrt(np.max(np.diag(covariance)))
+            if max_sigma > max_gps_sigma:
+                continue
             gps_noise = gtsam.noiseModel.Gaussian.Covariance(covariance)
-            point_gtsam = gtsam.Point3(easting, northing, altitude)
-            graph.add(gtsam.PriorFactorPoint3(idx_gtsam, point_gtsam, gps_noise))
+            graph.add(gtsam.PoseTranslationPrior3D(idx_gtsam, np.array([easting, northing, altitude]), gps_noise))
 
 
         initial_estimate = gtsam.Values()
@@ -431,10 +435,14 @@ class PoseData(RobotData):
             easting, northing, _, _ = gps_data.utm(t_i)
             altitude = gps_data.altitude(t_i)
             point_gtsam = gtsam.Point3(easting, northing, altitude)
-            pose_initial_estimate = gtsam.Pose3(gtsam.Rot3.Quaternion(1., 0., 0., 0.), point_gtsam)
+            random_rot = np.random.randn(4)
+            random_rot /= np.linalg.norm(random_rot)
+            pose_initial_estimate = gtsam.Pose3(gtsam.Rot3.Quaternion(*random_rot), point_gtsam)
             initial_estimate.insert(i, pose_initial_estimate)
 
-        optimizer = gtsam.GaussNewtonOptimizer(graph, initial_estimate)
+        params = gtsam.LevenbergMarquardtParams()
+        optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate, params)
+
         result = optimizer.optimize()
         result_pd = cls.from_times_and_poses(
             local_pose_estimate.times, 
