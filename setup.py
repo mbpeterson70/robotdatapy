@@ -22,7 +22,8 @@ setup(
                         'pykitti',
                         'evo',
                         'opencv-python',
-                        'utm'
+                        'utm',
+                        'gtsam'
                       ],
 
 )

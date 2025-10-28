@@ -149,6 +149,13 @@ class GPSData(RobotData):
                 return self.lat_lon_alts[i]
             # Otherwise assume a single index
             return self.lat_lon_alts[idx]
+        
+    def covariance(self, t):
+        """
+        Return the covariance matrix at the time nearest t.
+        """
+        idx = self.idx(t, force_single=True)
+        return self.covariances[idx]
     
     def path_length(self, t0=None, tf=None, use_altitude=True) -> float:
         """

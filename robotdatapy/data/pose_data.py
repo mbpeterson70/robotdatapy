@@ -26,8 +26,10 @@ import evo
 import csv
 import yaml
 from typing import List
+import gtsam
 
 from robotdatapy.data.robot_data import RobotData
+from robotdatapy.transform import transform_to_gtsam
 
 KIMERA_MULTI_GT_CSV_OPTIONS = {
     'cols': {
@@ -381,6 +383,67 @@ class PoseData(RobotData):
         positions = data[:,1:4]
         orientations = data[:,4:]
         return cls(times, positions, orientations, **kwargs)
+    
+    @classmethod
+    def from_gps_and_local_pose_estimates(cls, gps_data, local_pose_estimate, 
+            estimate_rot_sig_deg=0.5, estimate_tran_sig_m=0.1):
+        """
+        Fuses GPS data with local pose estimates to create a global PoseData object.
+
+        Args:
+            gps_data (GPSData): GPS data
+            local_pose_estimate (PoseData): Local pose estimates
+
+        Returns:
+            PoseData: Global PoseData object
+        """
+        estimate_noise = gtsam.noiseModel.Diagonal.Sigmas(
+            np.array([estimate_rot_sig_deg, estimate_rot_sig_deg, estimate_rot_sig_deg, 
+                      estimate_tran_sig_m, estimate_tran_sig_m, estimate_tran_sig_m]))
+        graph = gtsam.NonlinearFactorGraph()
+
+        T_d_iminus1 = local_pose_estimate.pose(local_pose_estimate.t0)
+
+        for i, t_i in enumerate(local_pose_estimate.times):
+            if i == 0:
+                continue
+            T_d_i = local_pose_estimate.pose(local_pose_estimate.times[i])
+            T_iminus1_i = np.linalg.inv(T_d_iminus1) @ T_d_i
+            T_iminus1_i_gtsam = transform_to_gtsam(T_iminus1_i)
+            graph.add(gtsam.BetweenFactorPose3(i-1, i, T_iminus1_i_gtsam, estimate_noise))
+            T_d_iminus1 = T_d_i
+
+        # Pin the nearest pose estimate to each GPS reading
+        # Probably should create a new variable for each GPS reading instead with two 
+        # factors to the nearby local pose estimates w/ interpolation
+        for j, t_j in enumerate(gps_data.times):
+            easting, northing, _, _ = gps_data.utm(t_j)
+            altitude = gps_data.altitude(t_j)
+            idx_gtsam = local_pose_estimate.idx(t_j, force_single=True)
+            covariance = gps_data.covariance(t_j)
+            gps_noise = gtsam.noiseModel.Gaussian.Covariance(covariance)
+            point_gtsam = gtsam.Point3(easting, northing, altitude)
+            graph.add(gtsam.PriorFactorPoint3(idx_gtsam, point_gtsam, gps_noise))
+
+
+        initial_estimate = gtsam.Values()
+        for i, t_i in enumerate(local_pose_estimate.times):
+            easting, northing, _, _ = gps_data.utm(t_i)
+            altitude = gps_data.altitude(t_i)
+            point_gtsam = gtsam.Point3(easting, northing, altitude)
+            pose_initial_estimate = gtsam.Pose3(gtsam.Rot3.Quaternion(1., 0., 0., 0.), point_gtsam)
+            initial_estimate.insert(i, pose_initial_estimate)
+
+        optimizer = gtsam.GaussNewtonOptimizer(graph, initial_estimate)
+        result = optimizer.optimize()
+        result_pd = cls.from_times_and_poses(
+            local_pose_estimate.times, 
+            [result.atPose3(i).matrix() for i in range(len(local_pose_estimate.times))], 
+            time_tol=local_pose_estimate.time_tol,
+            interp=local_pose_estimate.interp,
+            causal=local_pose_estimate.causal,
+        )
+        return result_pd
 
     def position(self, t):
         """

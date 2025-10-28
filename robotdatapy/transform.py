@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot, Slerp
 from typing import List
+import gtsam
 
 def transform_vec(T, vec):
     unshaped_vec = vec.reshape(-1)
@@ -132,6 +133,12 @@ def R_t_to_transform(R, t):
     T[:3,:3] = R
     T[:3,3] = t
     return T
+
+def transform_to_gtsam(T):
+    """Convert a 4x4 homogeneous transformation matrix to a gtsam Pose3."""
+    T_q_wxyz = [Rot.from_matrix(T[:3, :3]).as_quat()[i] for i in [3, 0, 1, 2]]
+    T_t = T[:3, 3]
+    return gtsam.Pose3(gtsam.Rot3.Quaternion(*T_q_wxyz), gtsam.Point3(T_t))
 
 def T3d_2_T2d(T3d):
     print("The function T3d_2_T2d is deprecated. " + 
