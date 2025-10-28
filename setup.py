@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(
     name='robotdatapy',
-    version='1.1.2',    
+    version='1.1.3',    
     description='Python package for interfacing with robot data',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -22,6 +22,7 @@ setup(
                         'pykitti',
                         'evo',
                         'opencv-python',
+                        'utm'
                       ],
 
 )

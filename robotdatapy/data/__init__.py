@@ -4,6 +4,7 @@ from robotdatapy.data.img_data import ImgData
 from robotdatapy.data.pose_data import PoseData
 from robotdatapy.data.robot_data import RobotData
 from robotdatapy.data.pointcloud_data import PointCloudData
+from robotdatapy.data.gps_data import GPSData
 
 from robotdatapy.data import array_data
 from robotdatapy.data import general_data
@@ -11,3 +12,4 @@ from robotdatapy.data import img_data
 from robotdatapy.data import pose_data
 from robotdatapy.data import robot_data
 from robotdatapy.data import pointcloud_data
+from robotdatapy.data import gps_data
