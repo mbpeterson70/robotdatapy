@@ -3,6 +3,7 @@ import numpy as np
 from rosbags.highlevel import AnyReader
 from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from pathlib import Path
+from typing import List
 
 from robotdatapy.exceptions import NoDataNearTimeException
 
@@ -175,3 +176,30 @@ class RobotData():
             add_types.update(get_types_from_msg(Path(msg_path).read_text(), msg_type)) 
         typestore.register(add_types)
         return typestore
+    
+    def _get_time_array(self, t: List[float], dt: float, t0: float, tf: float) -> np.ndarray:
+        """
+        Given some timing options, a numpy array of times (e.g., used for plotting) are returned
+
+        Args:
+            t (List[float]): If a list of floats (times) are provided, this will just be returned
+                as is.
+            dt (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
+                is returned.
+            t0 (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
+                is returned.
+            tf (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
+                is returned.
+
+        Returns:
+            np.ndarray: List of times
+        """
+        if t0 is None and t is None:
+            t0 = self.t0
+        if tf is None and t is None:
+            tf = self.tf
+            
+        if t is not None:
+            return t
+        else:
+            return np.arange(t0, tf, dt)
