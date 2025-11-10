@@ -26,8 +26,10 @@ import evo
 import csv
 import yaml
 from typing import List
+import gtsam
 
 from robotdatapy.data.robot_data import RobotData
+from robotdatapy.transform import transform_to_gtsam
 
 KIMERA_MULTI_GT_CSV_OPTIONS = {
     'cols': {
@@ -381,6 +383,75 @@ class PoseData(RobotData):
         positions = data[:,1:4]
         orientations = data[:,4:]
         return cls(times, positions, orientations, **kwargs)
+    
+    @classmethod
+    def from_gps_and_local_pose_estimates(cls, gps_data, local_pose_estimate, 
+            estimate_rot_sig_deg=0.5, estimate_tran_sig_m=0.1, max_gps_sigma=np.inf):
+        """
+        Fuses GPS data with local pose estimates to create a global PoseData object.
+
+        Args:
+            gps_data (GPSData): GPS data
+            local_pose_estimate (PoseData): Local pose estimates
+
+        Returns:
+            PoseData: Global PoseData object
+        """
+        estimate_rot_sig_rad = np.deg2rad(estimate_rot_sig_deg)
+        estimate_noise = gtsam.noiseModel.Diagonal.Sigmas(
+            np.array([estimate_rot_sig_rad, estimate_rot_sig_rad, estimate_rot_sig_rad, 
+                      estimate_tran_sig_m, estimate_tran_sig_m, estimate_tran_sig_m]))
+        graph = gtsam.NonlinearFactorGraph()
+
+        T_d_iminus1 = local_pose_estimate.pose(local_pose_estimate.t0)
+
+        for i, t_i in enumerate(local_pose_estimate.times):
+            if i == 0:
+                continue
+            T_d_i = local_pose_estimate.pose(local_pose_estimate.times[i])
+            T_iminus1_i = np.linalg.inv(T_d_iminus1) @ T_d_i
+            T_iminus1_i_gtsam = transform_to_gtsam(T_iminus1_i)
+            graph.add(gtsam.BetweenFactorPose3(i-1, i, T_iminus1_i_gtsam, estimate_noise))
+            T_d_iminus1 = T_d_i
+
+        # Pin the nearest pose estimate to each GPS reading
+        # Probably should create a new variable for each GPS reading instead with two 
+        # factors to the nearby local pose estimates w/ interpolation
+        for j, t_j in enumerate(gps_data.times):
+            easting, northing, _, _ = gps_data.utm(t_j)
+            altitude = gps_data.altitude(t_j)
+            idx_gtsam = local_pose_estimate.idx(t_j, force_single=True)
+            covariance = gps_data.covariance(t_j)
+
+            max_sigma = np.sqrt(np.max(np.diag(covariance)))
+            if max_sigma > max_gps_sigma:
+                continue
+            gps_noise = gtsam.noiseModel.Gaussian.Covariance(covariance)
+            graph.add(gtsam.PoseTranslationPrior3D(idx_gtsam, np.array([easting, northing, altitude]), gps_noise))
+
+
+        initial_estimate = gtsam.Values()
+        for i, t_i in enumerate(local_pose_estimate.times):
+            easting, northing, _, _ = gps_data.utm(t_i)
+            altitude = gps_data.altitude(t_i)
+            point_gtsam = gtsam.Point3(easting, northing, altitude)
+            random_rot = np.random.randn(4)
+            random_rot /= np.linalg.norm(random_rot)
+            pose_initial_estimate = gtsam.Pose3(gtsam.Rot3.Quaternion(*random_rot), point_gtsam)
+            initial_estimate.insert(i, pose_initial_estimate)
+
+        params = gtsam.LevenbergMarquardtParams()
+        optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate, params)
+
+        result = optimizer.optimize()
+        result_pd = cls.from_times_and_poses(
+            local_pose_estimate.times, 
+            [result.atPose3(i).matrix() for i in range(len(local_pose_estimate.times))], 
+            time_tol=local_pose_estimate.time_tol,
+            interp=local_pose_estimate.interp,
+            causal=local_pose_estimate.causal,
+        )
+        return result_pd
 
     def position(self, t):
         """
@@ -916,32 +987,3 @@ class PoseData(RobotData):
                                                  transform_msg.transform.rotation.z, 
                                                  transform_msg.transform.rotation.w])
         return cls(times, positions, orientations, **kwargs)
-    
-    def _get_time_array(self, t: List[float], dt: float, t0: float, tf: float) -> np.ndarray:
-        """
-        Given some timing options, a numpy array of times (e.g., used for plotting) are returned
-
-        Args:
-            t (List[float]): If a list of floats (times) are provided, this will just be returned
-                as is.
-            dt (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
-                is returned.
-            t0 (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
-                is returned.
-            tf (float): If t is not provided (is None) then an array from t0 to tf with spacing dt
-                is returned.
-
-        Returns:
-            np.ndarray: List of times
-        """
-        assert t is None or (t0 is None and tf is None), "t and t0/tf cannot be given together"
-
-        if t0 is None and t is None:
-            t0 = self.t0
-        if tf is None and t is None:
-            tf = self.tf
-            
-        if t is not None:
-            return t
-        else:
-            return np.arange(t0, tf, dt)
