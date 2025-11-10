@@ -121,6 +121,8 @@ class GPSData(RobotData):
         Otherwise, returns the closest sample.
         """
         lat, lon, alt = self.lat_lon_alt(t)
+        if np.any(np.isnan([lat, lon])):
+            return (np.nan, np.nan, np.nan, np.nan)
         easting, northing, zone_number, zone_letter = utm.from_latlon(lat, lon)
         return (easting, northing, zone_number, zone_letter)
 
@@ -156,6 +158,16 @@ class GPSData(RobotData):
         """
         idx = self.idx(t, force_single=True)
         return self.covariances[idx]
+    
+    def rm_nans(self):
+        """
+        Removes any entries with NaNs in lat_lon_alts.
+        """
+        nan_idx = np.any(np.isnan(self.lat_lon_alts), axis=1)
+        self.times = self.times[~nan_idx]
+        self.lat_lon_alts = self.lat_lon_alts[~nan_idx]
+        self.covariances = self.covariances[~nan_idx]
+        return
     
     def path_length(self, t0=None, tf=None, use_altitude=True) -> float:
         """

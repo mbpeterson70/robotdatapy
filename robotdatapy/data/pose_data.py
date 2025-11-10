@@ -420,6 +420,8 @@ class PoseData(RobotData):
         for j, t_j in enumerate(gps_data.times):
             easting, northing, _, _ = gps_data.utm(t_j)
             altitude = gps_data.altitude(t_j)
+            if np.any(np.isnan([easting, northing, altitude])):
+                continue
             idx_gtsam = local_pose_estimate.idx(t_j, force_single=True)
             covariance = gps_data.covariance(t_j)
 
@@ -431,6 +433,8 @@ class PoseData(RobotData):
 
 
         initial_estimate = gtsam.Values()
+        orig_gps_time_tol = gps_data.time_tol
+        gps_data.time_tol = np.inf  # guarantees a value is returned for initial guess
         for i, t_i in enumerate(local_pose_estimate.times):
             easting, northing, _, _ = gps_data.utm(t_i)
             altitude = gps_data.altitude(t_i)
@@ -439,6 +443,7 @@ class PoseData(RobotData):
             random_rot /= np.linalg.norm(random_rot)
             pose_initial_estimate = gtsam.Pose3(gtsam.Rot3.Quaternion(*random_rot), point_gtsam)
             initial_estimate.insert(i, pose_initial_estimate)
+        gps_data.time_tol = orig_gps_time_tol # restore time tol
 
         params = gtsam.LevenbergMarquardtParams()
         optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate, params)
