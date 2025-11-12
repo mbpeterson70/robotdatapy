@@ -29,7 +29,7 @@ from typing import List
 
 from robotdatapy.data.robot_data import RobotData
 
-KIMERA_MULTI_GT_CSV_OPTIONS = {
+DEFAULT_GT_OPTIONS = {
     'cols': {
         'time': ["#timestamp_kf"],
         'position': ['x', 'y', 'z'],
@@ -42,6 +42,7 @@ KIMERA_MULTI_GT_CSV_OPTIONS = {
     },
     'timescale': 1e-9
 }
+KIMERA_MULTI_GT_CSV_OPTIONS = DEFAULT_GT_OPTIONS
 
 class PoseData(RobotData):
     """
@@ -123,7 +124,8 @@ class PoseData(RobotData):
         return cls.from_dict(args)
     
     @classmethod
-    def from_csv(cls, path, csv_options, interp=True, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
+    def from_csv(cls, path, csv_options=DEFAULT_GT_OPTIONS, interp=True, causal=False, time_tol=.1,
+                 t0=None, T_premultiply=None, T_postmultiply=None):
         """
         Extracts pose data from csv file with 9 columns for time (sec/nanosec), position, and orientation
 
