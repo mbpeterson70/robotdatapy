@@ -73,6 +73,32 @@ class ImgData(RobotData):
         self.camera_params = CameraParams()
             
     @classmethod
+    def from_dict(cls, img_data_dict):
+        """
+        Create an ImgData object as specified by a dictionary of kwargs.
+
+        Args:
+            img_data_dict (dict): Dictionary with key 'type' and other kwargs
+                depending on the type. Type can be 'bag', 'kitti', 'zip', or 'npz'.
+
+        Raises:
+            ValueError: ValueError if invalid type
+
+        Returns:
+            ImgData: ImgData object.
+        """
+        if img_data_dict['type'] == 'bag':
+            return cls.from_bag(**{k: v for k, v in img_data_dict.items() if k != 'type'})
+        elif img_data_dict['type'] == 'kitti':
+            return cls.from_kitti(**{k: v for k, v in img_data_dict.items() if k != 'type'})
+        elif img_data_dict['type'] == 'zip':
+            return cls.from_zip(**{k: v for k, v in img_data_dict.items() if k != 'type'})
+        elif img_data_dict['type'] == 'npz':
+            return cls.from_npz(**{k: v for k, v in img_data_dict.items() if k != 'type'})
+        else:
+            raise ValueError(f"Invalid img data type: {img_data_dict['type']}")
+            
+    @classmethod
     def from_bag(cls, path, topic, camera_info_topic=None, time_range=None, time_tol=.1, causal=False, 
                  t0=None, compressed=True,  color_space=None, compressed_rvl=False):
         """
