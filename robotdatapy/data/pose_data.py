@@ -84,7 +84,7 @@ class PoseData(RobotData):
 
         Args:
             pose_data_dict (dict): Dictionary with key 'type' and other kwargs
-                depending on the type. Type can be 'bag', 'csv', 'kitti', or 'bag_tf.
+                depending on the type. Type can be 'bag', 'bag_tf', 'csv', or 'kitti'.
 
         Raises:
             ValueError: ValueError if invalid type
@@ -500,25 +500,72 @@ class PoseData(RobotData):
             poses = np.einsum('nij,jk->nik', poses, self.T_postmultiply, optimize=True)
         return poses
 
-    def inv(self):
+    def inv(self, times=None) -> 'PoseData':
         """
         Returns a PoseData object with inverted poses
         """
-        interp_original_val = self.interp
-        self.interp = False
+        times = self.times if times is None else times
 
         poses_inv = []
-        for ti in self.times:
+        for ti in times:
             poses_inv.append(np.linalg.inv(self.pose(ti)))
 
-        self.interp = interp_original_val
-
         return PoseData.from_times_and_poses(
-            times=self.times,
+            times=times,
             poses=poses_inv,
             interp=self.interp,
             causal=self.causal,
             time_tol=self.time_tol,
+        )
+    
+    def multiply(self, other: 'PoseData', times=None, **kwargs) -> 'PoseData':
+        """
+        Multiplies this PoseData object with another PoseData object.
+
+        Args:
+            other (PoseData): other PoseData object
+
+        Returns:
+            PoseData: Resulting PoseData object
+        """
+        if times is None:
+            all_times = set(self.times.tolist() + other.times.tolist())
+            times = np.array(sorted(list(all_times)))
+        
+        poses_mult = []
+        for ti in self.times:
+            poses_mult.append(self.pose(ti) @ other.pose(ti))
+
+        if 'interp' not in kwargs and self.interp == other.interp:
+            kwargs['interp'] = self.interp
+        if 'causal' not in kwargs and self.causal == other.causal:
+            kwargs['causal'] = self.causal
+        if 'time_tol' not in kwargs:
+            kwargs['time_tol'] = min(self.time_tol, other.time_tol)
+
+        return PoseData.from_times_and_poses(
+            times=self.times,
+            poses=poses_mult,
+            **kwargs
+        )
+    
+    def copy(self) -> 'PoseData':
+        """
+        Returns a copy of the PoseData object.
+
+        Returns:
+            PoseData: copy of the PoseData object
+        """
+        return PoseData(
+            times=self.times.copy(),
+            positions=self.positions.copy(),
+            orientations=self.orientations.copy(),
+            interp=self.interp,
+            causal=self.causal,
+            time_tol=self.time_tol,
+            t0=self.t0,
+            T_premultiply=None if self.T_premultiply is None else self.T_premultiply.copy(),
+            T_postmultiply=None if self.T_postmultiply is None else self.T_postmultiply.copy(),
         )
     
     def clip(self, t0, tf):
@@ -805,6 +852,8 @@ class PoseData(RobotData):
         with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))]) as reader:
             for tf_type in ['tf', 'tf_static']:
                 connections = [x for x in reader.connections if x.topic == f"/{tf_type}"]
+                # msgs = list(reader.messages(connections=connections))
+                # return
                 for (connection, timestamp, rawdata) in reader.messages(connections=connections):
                     msg = reader.deserialize(rawdata, connection.msgtype)
                     if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
