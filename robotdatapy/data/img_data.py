@@ -203,7 +203,7 @@ class ImgData(RobotData):
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(path, fourcc, fps, (sample_img.shape[1], sample_img.shape[0]))
         for t in self.times:
-            out.write(self.img(t))
+            out.write(self.img(t)[:,:,:3])
         out.release()
         return
 
