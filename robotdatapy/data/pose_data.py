@@ -494,6 +494,8 @@ class PoseData(RobotData):
     
     def all_poses(self, multiply: bool = True) -> np.ndarray:
         poses = self.untransformed_poses
+        if not multiply:
+            return poses
         if self.T_premultiply is not None:
             poses = np.einsum('ij,njk->nik', self.T_premultiply, poses, optimize=True)
         if self.T_postmultiply is not None:
@@ -554,7 +556,6 @@ class PoseData(RobotData):
             tf (float, optional): end time. Defaults to self.tf.
             axes (str, optional): axes to plot. Defaults to 'xy'.
         """
-        assert t is None or (t0 is None and tf is None), "t and t0/tf cannot be given together"
         assert trajectory or pose, "Must request plotting trajectory and/or pose"
         
         if ax is None:
@@ -635,6 +636,67 @@ class PoseData(RobotData):
         ax.set_ylabel('y')
         ax.set_zlabel('z')
         ax.set_aspect('equal')
+        return ax
+    
+    def plot_over_time(self, dt: float = .1, t: List[float] = None, t0: float = None, tf: float = None,
+                       axes='all', ax=None):
+        """
+        Plots the position and orientation data over time.
+
+        Args:
+            dt (float, optional): Time separation between points. Defaults to .1.
+            t (List[float], optional): Specific times to be plotted. Defaults to None.
+            t0 (float, optional): Start time if using dt. If None, uses self.t0. Defaults to None.
+            tf (float, optional): End time if using dt. If None, uses self.tf. Defaults to None.
+            axes (str, optional): Choose from ['all', 'xyz', 'rpy', 'x', y', 'z', 'r', 'p', 'y'.
+                If 'all', 'xyz', or 'rpy', cannot provide ax. Defaults to 'all'.
+            ax (Matplotlib ax, optional): Matplotlib ax. Defaults to None.
+        """
+        t = self._get_time_array(t=t, dt=dt, t0=t0, tf=tf)
+
+        assert axes in ['all', 'xyz', 'rpy', 'x', 'y', 'z', 'r', 'p', 'y'], \
+            "axes must be one of ['all', 'xyz', 'rpy', 'x', y', 'z', 'r', 'p', 'y']"
+        assert axes not in ['all', 'xyz', 'rpy'] or ax is None, \
+            "Cannot provide ax if axes is 'all', 'xyz', or 'rpy'"
+        
+        plot_positions = False
+        plot_rotations = False
+        if axes in ['all', 'xyz', 'rpy']:
+            num_ax = 6 if axes == 'all' else 3
+            if axes == 'all':
+                axes_idx = [0, 1, 2, 3, 4, 5]
+            elif axes == 'xyz':
+                axes_idx = [0, 1, 2]
+            else: # rpy
+                axes_idx = [3, 4, 5]
+            plot_positions = axes in ['all', 'xyz']
+            plot_rotations = axes in ['all', 'rpy']
+        else:
+            num_ax = 1
+            axes_idx = np.where(np.array(list('xyzrpy')) == axes)[0].tolist()
+            plot_positions = axes_idx[0] in [0, 1, 2]
+            plot_rotations = axes_idx[0] in [3, 4, 5]
+
+        if ax is None:
+            fig, ax = plt.subplots(num_ax, 1)
+
+        if plot_positions:
+            positions = np.array([self.position(ti) for ti in t])
+            vals = positions
+        if plot_rotations:
+            quats = np.array([self.orientation(ti) for ti in t])
+            rpys = Rot.from_quat(quats).as_euler('ZYX', degrees=True)[:,::-1]
+            if plot_positions:
+                vals = np.hstack([positions, rpys])
+            else:
+                vals = rpys
+
+        for i, ax_idx in enumerate(axes_idx):
+            ax_i = ax if num_ax == 1 else ax[i]
+            ax_i.plot(t, vals[:,ax_idx])
+            ax_i.set_xlabel('time (s)')
+            ax_i.set_ylabel(['x', 'y', 'z', 'roll', 'pitch', 'yaw'][ax_idx])
+            ax_i.grid(True)
         return ax
 
     def to_evo(self):
