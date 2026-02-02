@@ -121,22 +121,24 @@ class ImgData(RobotData):
         """
         if time_range is not None:
             assert time_range[0] < time_range[1], "time_range must be given in incrementing order"
-        
+
+        # Convert time_range from seconds to nanoseconds for rosbags
+        start_ns = int(time_range[0] * 1e9) if time_range is not None else None
+        stop_ns = int(time_range[1] * 1e9) if time_range is not None else None
+
         times = []
         img_msgs = []
         with AnyReader([Path(path)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 raise MsgNotFound(topic, path)
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in reader.messages(
+                connections=connections, start=start_ns, stop=stop_ns
+            ):
                 if connection.topic != topic:
                     continue
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
-                if time_range is not None and t < time_range[0]:
-                    continue
-                elif time_range is not None and t > time_range[1]:
-                    break
 
                 times.append(t)
                 img_msgs.append(msg)

@@ -160,6 +160,24 @@ class RobotData():
         return (first_time, last_time)
 
     @classmethod
+    def bag_t_range(cls, bag):
+        """
+        Get the time range of the entire bag using chunk metadata.
+
+        This is much faster than topic_t_range because it uses the bag's
+        index metadata rather than iterating through all messages.
+
+        Args:
+            bag: Path to the bag file.
+
+        Returns:
+            Tuple of (start_time, end_time) in seconds.
+        """
+        with AnyReader([Path(bag)]) as reader:
+            # start_time and end_time are in nanoseconds
+            return (reader.start_time * 1e-9, reader.end_time * 1e-9)
+
+    @classmethod
     def _register_custom_msg_types(cls, custom_msg_types, custom_msg_paths, typestore):
         """
         Registers custom message types for ROS serialization.
