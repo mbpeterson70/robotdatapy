@@ -195,7 +195,8 @@ class PoseData(RobotData):
         t0: float = None,
         T_premultiply: np.array = None,
         T_postmultiply: np.array = None,
-        time_range: list = None
+        time_range: list = None,
+        time_range_relative: bool = False
     ):
         """
         Create a PoseData object from a ROS bag file. Supports msg types PoseStamped and Odometry.
@@ -213,11 +214,17 @@ class PoseData(RobotData):
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
             time_range (list, shape=(2,), optional): Two element list indicating range of times
                 that should be stored within object.
+            time_range_relative (bool, optional): If True, time_range is interpreted as relative
+                to the bag start time. Defaults to False.
 
         Returns:
             PoseData: PoseData object
         """
         path = os.path.expanduser(os.path.expandvars(path))
+
+        # Convert relative time_range to absolute if needed
+        if time_range is not None and time_range_relative:
+            time_range = cls.get_absolute_bag_time(path, np.array(time_range)).tolist()
 
         # Convert time_range from seconds to nanoseconds for rosbags
         start_ns = int(time_range[0] * 1e9) if time_range is not None else None

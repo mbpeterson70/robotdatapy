@@ -3,7 +3,7 @@ import numpy as np
 from rosbags.highlevel import AnyReader
 from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
 from robotdatapy.exceptions import NoDataNearTimeException
 
@@ -176,6 +176,22 @@ class RobotData():
         with AnyReader([Path(bag)]) as reader:
             # start_time and end_time are in nanoseconds
             return (reader.start_time * 1e-9, reader.end_time * 1e-9)
+
+    @classmethod
+    def get_absolute_bag_time(cls, bag, relative_time: Union[float, np.ndarray]):
+        """
+        Convert a relative time (offset from bag start) to an absolute timestamp.
+
+        Args:
+            bag: Path to the bag file.
+            relative_time (Union[float, np.ndarray]): Time relative to the bag start.
+                Can be a single float or a numpy array of times.
+
+        Returns:
+            Absolute time(s) in seconds. Same type as relative_time input.
+        """
+        bag_start = cls.bag_t_range(bag)[0]
+        return bag_start + relative_time
 
     @classmethod
     def _register_custom_msg_types(cls, custom_msg_types, custom_msg_paths, typestore):
