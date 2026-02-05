@@ -194,7 +194,9 @@ class PoseData(RobotData):
         time_tol: float = .1,
         t0: float = None,
         T_premultiply: np.array = None,
-        T_postmultiply: np.array = None
+        T_postmultiply: np.array = None,
+        time_range: list = None,
+        time_range_relative: bool = False
     ):
         """
         Create a PoseData object from a ROS bag file. Supports msg types PoseStamped and Odometry.
@@ -210,11 +212,24 @@ class PoseData(RobotData):
                 the data_file. Defaults to None.
             T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
+            time_range (list, shape=(2,), optional): Two element list indicating range of times
+                that should be stored within object.
+            time_range_relative (bool, optional): If True, time_range is interpreted as relative
+                to the bag start time. Defaults to False.
 
         Returns:
             PoseData: PoseData object
         """
         path = os.path.expanduser(os.path.expandvars(path))
+
+        # Convert relative time_range to absolute if needed
+        if time_range is not None and time_range_relative:
+            time_range = cls.get_absolute_bag_time(path, np.array(time_range)).tolist()
+
+        # Convert time_range from seconds to nanoseconds for rosbags
+        start_ns = int(time_range[0] * 1e9) if time_range is not None else None
+        stop_ns = int(time_range[1] * 1e9) if time_range is not None else None
+
         times = []
         positions = []
         orientations = []
@@ -225,7 +240,9 @@ class PoseData(RobotData):
 
             last_path_msg = None
             t0 = None
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in reader.messages(
+                connections=connections, start=start_ns, stop=stop_ns
+            ):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if t0 is None:
                     t0 = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9

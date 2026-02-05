@@ -99,44 +99,55 @@ class ImgData(RobotData):
             raise ValueError(f"Invalid img data type: {img_data_dict['type']}")
             
     @classmethod
-    def from_bag(cls, path, topic, camera_info_topic=None, time_range=None, time_tol=.1, causal=False, 
-                 t0=None, compressed=True,  color_space=None, compressed_rvl=False):
+    def from_bag(cls, path, topic, camera_info_topic=None, time_range=None, time_range_relative=False,
+                 time_tol=.1, causal=False, t0=None, compressed=True, color_space=None,
+                 compressed_rvl=False, stride=1):
         """
         Creates ImgData object from bag file
 
         Args:
             path (str): ROS bag file path
             topic (str): ROS image topic
-            camera_info_topic (str, optional): ROS camera info topic used to extract camera 
+            camera_info_topic (str, optional): ROS camera info topic used to extract camera
                 parameters if provided. Defaults to None.
             time_range (list, shape=(2,), optional): Two element list indicating range of times
                 that should be stored within object
-            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
+            time_range_relative (bool, optional): If True, time_range is interpreted as relative
+                to the bag start time. Defaults to False.
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If
                 no pose is available within tolerance, None is returned. Defaults to .1.
-            t0 (float, optional): Local time at the first msg. If not set, uses global time from 
+            t0 (float, optional): Local time at the first msg. If not set, uses global time from
                 the data_path. Defaults to None.
-            time_range (list, shape=(2,), optional): Two element list indicating range of times
-                (before being offset with t0) that should be stored within object
             compressed (bool, optional): True if data_path contains compressed images
+            stride (int, optional): Keep every nth frame. stride=1 keeps all frames, stride=3
+                keeps every 3rd frame. Useful for reducing memory usage. Defaults to 1.
         """
         if time_range is not None:
             assert time_range[0] < time_range[1], "time_range must be given in incrementing order"
-        
+
+        # Convert relative time_range to absolute if needed
+        if time_range is not None and time_range_relative:
+            time_range = cls.get_absolute_bag_time(path, np.array(time_range)).tolist()
+
+        # Convert time_range from seconds to nanoseconds for rosbags
+        start_ns = int(time_range[0] * 1e9) if time_range is not None else None
+        stop_ns = int(time_range[1] * 1e9) if time_range is not None else None
+
         times = []
         img_msgs = []
         with AnyReader([Path(path)]) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 raise MsgNotFound(topic, path)
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for frame_idx, (connection, timestamp, rawdata) in enumerate(reader.messages(
+                connections=connections, start=start_ns, stop=stop_ns
+            )):
                 if connection.topic != topic:
+                    continue
+                if frame_idx % stride:
                     continue
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
-                if time_range is not None and t < time_range[0]:
-                    continue
-                elif time_range is not None and t > time_range[1]:
-                    break
 
                 times.append(t)
                 img_msgs.append(msg)
