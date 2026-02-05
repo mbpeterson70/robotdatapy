@@ -2,7 +2,7 @@
 #
 # pose_data.py
 #
-# Interface for robot pose data. Currently supports data 
+# Interface for robot pose data. Currently supports data
 # from ROS bags, CSV files, and KITTI datasets.
 #
 # Authors: Mason Peterson, Lucas Jia
@@ -48,8 +48,8 @@ class PoseData(RobotData):
     """
     Class for easy access to object poses over time
     """
-    
-    def __init__(self, times, positions, orientations, interp=True, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None): 
+
+    def __init__(self, times, positions, orientations, interp=True, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
         """
         Class for easy access to object poses over time
 
@@ -58,9 +58,9 @@ class PoseData(RobotData):
             positions (np.array, shape(n,3)): xyz positions of the poses
             orientations (np.array, shape(n,4)): quaternions of the poses
             interp (bool): interpolate between closest times, else choose the closest time.
-            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If
                 no pose is available within tolerance, None is returned. Defaults to .1.
-            t0 (float, optional): Local time at the first msg. If not set, uses global time from 
+            t0 (float, optional): Local time at the first msg. If not set, uses global time from
                 the data_file. Defaults to None.
             T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
@@ -84,7 +84,7 @@ class PoseData(RobotData):
 
         Args:
             pose_data_dict (dict): Dictionary with key 'type' and other kwargs
-                depending on the type. Type can be 'bag', 'csv', 'kitti', or 'bag_tf.
+                depending on the type. Type can be 'bag', 'bag_tf', 'csv', or 'kitti'.
 
         Raises:
             ValueError: ValueError if invalid type
@@ -102,7 +102,7 @@ class PoseData(RobotData):
             return cls.from_kitti(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
         else:
             raise ValueError("Invalid pose data type")
-        
+
     @classmethod
     def from_yaml(cls, yaml_path):
         """
@@ -122,7 +122,7 @@ class PoseData(RobotData):
         with open(os.path.expanduser(yaml_path), 'r') as f:
             args = yaml.safe_load(f)
         return cls.from_dict(args)
-    
+
     @classmethod
     def from_csv(cls, path, csv_options=DEFAULT_GT_OPTIONS, interp=True, causal=False, time_tol=.1,
                  t0=None, T_premultiply=None, T_postmultiply=None):
@@ -131,14 +131,14 @@ class PoseData(RobotData):
 
         Args:
             path (str): CSV file path
-            csv_options (dict): Can include dict of structure: dict['col'], dict['col_nums'] which 
-                map to dicts containing keys of 'time', 'position', and 'orientation' and the 
-                corresponding column names and numbers. csv_options['timescale'] can be given if 
+            csv_options (dict): Can include dict of structure: dict['col'], dict['col_nums'] which
+                map to dicts containing keys of 'time', 'position', and 'orientation' and the
+                corresponding column names and numbers. csv_options['timescale'] can be given if
                 the time column is not in seconds.
             interp (bool): interpolate between closest times, else choose the closest time.
-            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If
                 no pose is available within tolerance, None is returned. Defaults to .1.
-            t0 (float, optional): Local time at the first msg. If not set, uses global time from 
+            t0 (float, optional): Local time at the first msg. If not set, uses global time from
                 the data_file. Defaults to None.
             T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
@@ -153,7 +153,7 @@ class PoseData(RobotData):
         else:
             cols = csv_options['cols']
             pose_df = pd.read_csv(path, usecols=cols['time'] + cols['position'] + cols['orientation'])
-            
+
             if 'col_nums' in csv_options:
                 t_cn = csv_options['col_nums']['time']
                 pos_cn = csv_options['col_nums']['position']
@@ -169,12 +169,12 @@ class PoseData(RobotData):
 
         return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol,
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
-    
+
     @classmethod
     def from_kmd_gt_csv(cls, path, **kwargs):
         """
-        Extracts pose data from a Kimera-Multi Data ground truth csv file. 
-        The csv file should have columns 
+        Extracts pose data from a Kimera-Multi Data ground truth csv file.
+        The csv file should have columns
         '#timestamp_kf', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'.
 
         Args:
@@ -183,18 +183,20 @@ class PoseData(RobotData):
         """
         csv_options = KIMERA_MULTI_GT_CSV_OPTIONS
         return cls.from_csv(path, csv_options, **kwargs)
-    
+
     @classmethod
     def from_bag(
-        cls, 
-        path: str, 
-        topic: str, 
-        interp: bool = True, 
-        causal: bool = False, 
-        time_tol: float = .1, 
-        t0: float = None, 
-        T_premultiply: np.array = None, 
-        T_postmultiply: np.array = None
+        cls,
+        path: str,
+        topic: str,
+        interp: bool = True,
+        causal: bool = False,
+        time_tol: float = .1,
+        t0: float = None,
+        T_premultiply: np.array = None,
+        T_postmultiply: np.array = None,
+        time_range: list = None,
+        time_range_relative: bool = False
     ):
         """
         Create a PoseData object from a ROS bag file. Supports msg types PoseStamped and Odometry.
@@ -204,17 +206,30 @@ class PoseData(RobotData):
             topic (str): ROS pose topic
             interp (bool): interpolate between closest times, else choose the closest time.
             causal (bool): if True, only use data that is available at the time requested.
-            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If
                 no pose is available within tolerance, None is returned. Defaults to .1.
-            t0 (float, optional): Local time at the first msg. If not set, uses global time from 
+            t0 (float, optional): Local time at the first msg. If not set, uses global time from
                 the data_file. Defaults to None.
             T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
+            time_range (list, shape=(2,), optional): Two element list indicating range of times
+                that should be stored within object.
+            time_range_relative (bool, optional): If True, time_range is interpreted as relative
+                to the bag start time. Defaults to False.
 
         Returns:
             PoseData: PoseData object
         """
         path = os.path.expanduser(os.path.expandvars(path))
+
+        # Convert relative time_range to absolute if needed
+        if time_range is not None and time_range_relative:
+            time_range = cls.get_absolute_bag_time(path, np.array(time_range)).tolist()
+
+        # Convert time_range from seconds to nanoseconds for rosbags
+        start_ns = int(time_range[0] * 1e9) if time_range is not None else None
+        stop_ns = int(time_range[1] * 1e9) if time_range is not None else None
+
         times = []
         positions = []
         orientations = []
@@ -225,7 +240,9 @@ class PoseData(RobotData):
 
             last_path_msg = None
             t0 = None
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in reader.messages(
+                connections=connections, start=start_ns, stop=stop_ns
+            ):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if t0 is None:
                     t0 = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
@@ -242,20 +259,20 @@ class PoseData(RobotData):
                     assert False, "invalid msg type (not PoseStamped or Odometry)"
                 times.append(msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9)
                 positions.append([pose.position.x, pose.position.y, pose.position.z])
-                orientations.append([pose.orientation.x, pose.orientation.y, 
+                orientations.append([pose.orientation.x, pose.orientation.y,
                                      pose.orientation.z, pose.orientation.w])
-            
+
             if last_path_msg is not None:
                 for pose_stamped in last_path_msg.poses:
                     times.append(pose_stamped.header.stamp.sec + pose_stamped.header.stamp.nanosec*1e-9)
-                    positions.append([pose_stamped.pose.position.x, 
+                    positions.append([pose_stamped.pose.position.x,
                                       pose_stamped.pose.position.y, pose_stamped.pose.position.z])
-                    orientations.append([pose_stamped.pose.orientation.x, pose_stamped.pose.orientation.y, 
+                    orientations.append([pose_stamped.pose.orientation.x, pose_stamped.pose.orientation.y,
                                          pose_stamped.pose.orientation.z, pose_stamped.pose.orientation.w])
 
-        return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol, 
+        return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol,
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
-        
+
     @classmethod
     def from_bag_tf(cls, path: str, parent_frame: str, child_frame: str, **kwargs):
         """
@@ -266,7 +283,7 @@ class PoseData(RobotData):
             parent_frame (str): parent frame
             child_frame (str): child frame
             kwargs: Additional arguments to pass to from_bag
-            
+
         Returns:
             PoseData: PoseData object
         """
@@ -274,35 +291,35 @@ class PoseData(RobotData):
         frame_chain = [child_frame]
         tf_types = []
         T_parent_child = []
-        
-        
+
+
         while frame_chain[-1] != parent_frame:
             if frame_chain[-1] not in tf_tree:
                 assert False, f"parent_frame {parent_frame} not found in bag file {path}"
             new_parent = frame_chain[-1]
             frame_chain.append(tf_tree[new_parent][1])
             tf_types.append(tf_tree[new_parent][0])
-            
+
         frame_chain = frame_chain[::-1]
         tf_types = tf_types[::-1]
-            
+
         for joint_i in range(len(tf_types)):
             if tf_types[joint_i] == 'tf_static':
-                T_parent_child.append(cls.static_tf_from_bag(path, 
+                T_parent_child.append(cls.static_tf_from_bag(path,
                     frame_chain[joint_i], frame_chain[joint_i+1]))
             elif tf_types[joint_i] == 'tf':
-                T_parent_child.append(cls._from_bag_single_tf_joint(path, 
+                T_parent_child.append(cls._from_bag_single_tf_joint(path,
                     frame_chain[joint_i], frame_chain[joint_i+1], **kwargs))
             else:
                 assert False, "invalid tf type"
-        
+
         times = []
         for joint_i in range(len(tf_types)-1, -1, -1):
             if tf_types[joint_i] == 'tf':
                 times = T_parent_child[joint_i].times
                 break
         assert len(times) > 0, "no times found"
-        
+
         poses = []
         for t in times:
             T = np.eye(4)
@@ -314,9 +331,9 @@ class PoseData(RobotData):
                 else:
                     assert False, "invalid tf type"
             poses.append(T)
-            
+
         return cls.from_times_and_poses(times, poses, **kwargs)
-        
+
     @classmethod
     def from_times_and_poses(cls, times, poses, **kwargs):
         """
@@ -325,7 +342,7 @@ class PoseData(RobotData):
         Args:
             times (np.array, shape(n,)): times of the poses
             poses (np.array, shape(n,4,4)): poses as rigid body transforms
-            
+
         Returns:
             PoseData: PoseData object
         """
@@ -342,9 +359,9 @@ class PoseData(RobotData):
             path (str): Path to directory that contains KITTI data.
             kitti_sequence (str): The KITTI sequence to use.
             interp (bool): interpolate between closest times, else choose the closest time.
-            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If 
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time. If
                 no pose is available within tolerance, None is returned. Defaults to .1.
-            t0 (float, optional): Local time at the first msg. If not set, uses global time from 
+            t0 (float, optional): Local time at the first msg. If not set, uses global time from
                 the data_file. Defaults to None.
             T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
@@ -363,9 +380,9 @@ class PoseData(RobotData):
         T_recorded_body = np.vstack([np.hstack([r, t[:3]]), np.asarray([0, 0, 0, 1])])
         T_postmultiply = T_recorded_body
 
-        return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol, 
+        return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol,
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
-            
+
     @classmethod
     def from_TUM_txt(cls, path, **kwargs):
         """
@@ -398,7 +415,7 @@ class PoseData(RobotData):
             return self.T_WB(t)[:3,3]
         else:
             return self._untransformed_position(t)
-        
+
     def orientation(self, t):
         """
         Orientation at time t.
@@ -413,7 +430,7 @@ class PoseData(RobotData):
             return Rot.from_matrix(self.T_WB(t)[:3,:3]).as_quat()
         else:
             return self._untransformed_orientation(t)
-                
+
     def _untransformed_position(self, t):
         """
         Position at time t.
@@ -435,7 +452,7 @@ class PoseData(RobotData):
         else:
             position = self.positions[idx]
         return position
-    
+
     def _untransformed_orientation(self, t):
         """
         Orientation at time t.
@@ -446,7 +463,7 @@ class PoseData(RobotData):
         Returns:
             np.array, shape(4,): orientation as a quaternion
         """
-        idx = self.idx(t)        
+        idx = self.idx(t)
         if self.interp:
             if idx[0] == idx[1] or self.times[idx[0]] == self.times[idx[1]]:
                 return self.orientations[idx[0]]
@@ -455,7 +472,7 @@ class PoseData(RobotData):
             return slerp(t).as_quat()
         else:
             return self.orientations[idx]
-    
+
     def T_WB(self, t, multiply=True):
         """
         Transform from world to body frame (or pose of body within world frame) at time t.
@@ -479,7 +496,7 @@ class PoseData(RobotData):
             if self.T_postmultiply is not None:
                 T_WB = T_WB @ self.T_postmultiply
         return T_WB
-    
+
     def pose(self, t, multiply=True):
         """
         Pose at time t.
@@ -491,36 +508,85 @@ class PoseData(RobotData):
             np.array, shape(4,4): Rigid body transform
         """
         return self.T_WB(t, multiply=multiply)
-    
+
     def all_poses(self, multiply: bool = True) -> np.ndarray:
         poses = self.untransformed_poses
+        if not multiply:
+            return poses
         if self.T_premultiply is not None:
             poses = np.einsum('ij,njk->nik', self.T_premultiply, poses, optimize=True)
         if self.T_postmultiply is not None:
             poses = np.einsum('nij,jk->nik', poses, self.T_postmultiply, optimize=True)
         return poses
 
-    def inv(self):
+    def inv(self, times=None) -> 'PoseData':
         """
         Returns a PoseData object with inverted poses
         """
-        interp_original_val = self.interp
-        self.interp = False
+        times = self.times if times is None else times
 
         poses_inv = []
-        for ti in self.times:
+        for ti in times:
             poses_inv.append(np.linalg.inv(self.pose(ti)))
 
-        self.interp = interp_original_val
-
         return PoseData.from_times_and_poses(
-            times=self.times,
+            times=times,
             poses=poses_inv,
             interp=self.interp,
             causal=self.causal,
             time_tol=self.time_tol,
         )
-    
+
+    def multiply(self, other: 'PoseData', times=None, **kwargs) -> 'PoseData':
+        """
+        Multiplies this PoseData object with another PoseData object.
+
+        Args:
+            other (PoseData): other PoseData object
+
+        Returns:
+            PoseData: Resulting PoseData object
+        """
+        if times is None:
+            all_times = set(self.times.tolist() + other.times.tolist())
+            times = np.array(sorted(list(all_times)))
+
+        poses_mult = []
+        for ti in self.times:
+            poses_mult.append(self.pose(ti) @ other.pose(ti))
+
+        if 'interp' not in kwargs and self.interp == other.interp:
+            kwargs['interp'] = self.interp
+        if 'causal' not in kwargs and self.causal == other.causal:
+            kwargs['causal'] = self.causal
+        if 'time_tol' not in kwargs:
+            kwargs['time_tol'] = min(self.time_tol, other.time_tol)
+
+        return PoseData.from_times_and_poses(
+            times=self.times,
+            poses=poses_mult,
+            **kwargs
+        )
+
+    def copy(self) -> 'PoseData':
+        """
+        Returns a copy of the PoseData object.
+
+        Returns:
+            PoseData: copy of the PoseData object
+        """
+        return PoseData(
+            times=self.times.copy(),
+            positions=self.positions.copy(),
+            orientations=self.orientations.copy(),
+            interp=self.interp,
+            causal=self.causal,
+            time_tol=self.time_tol,
+            t0=self.t0,
+            T_premultiply=None if self.T_premultiply is None else self.T_premultiply.copy(),
+            T_postmultiply=None if self.T_postmultiply is None else self.T_postmultiply.copy(),
+        )
+
     def clip(self, t0, tf):
         """
         Clips the data to be between t0 and tf
@@ -554,9 +620,8 @@ class PoseData(RobotData):
             tf (float, optional): end time. Defaults to self.tf.
             axes (str, optional): axes to plot. Defaults to 'xy'.
         """
-        assert t is None or (t0 is None and tf is None), "t and t0/tf cannot be given together"
         assert trajectory or pose, "Must request plotting trajectory and/or pose"
-        
+
         if ax is None:
             ax = plt.gca()
 
@@ -581,60 +646,121 @@ class PoseData(RobotData):
             for ti in t:
                 for rob_ax, color in zip([0, 1, 2], ['red', 'green', 'blue']):
                     T_WB = self.T_WB(ti)
-                    ax.plot([T_WB[ax_idx[0],3], T_WB[ax_idx[0],3] + axis_len*T_WB[ax_idx[0],rob_ax]], 
+                    ax.plot([T_WB[ax_idx[0],3], T_WB[ax_idx[0],3] + axis_len*T_WB[ax_idx[0],rob_ax]],
                             [T_WB[ax_idx[1],3], T_WB[ax_idx[1],3] + axis_len*T_WB[ax_idx[1],rob_ax]], color=color)
-            
+
         ax.set_xlabel(axes[0])
         ax.set_ylabel(axes[1])
         ax.set_aspect('equal')
         ax.grid(True)
         return ax
-    
-    def plot3d(self, ax=None, dt: float = .1, t: List[float] = None, t0: float = None, 
+
+    def plot3d(self, ax=None, dt: float = .1, t: List[float] = None, t0: float = None,
             tf: float = None, pose: bool = False, trajectory: bool = True, axis_len: float = 1.0):
         """
         Creates a 3D plot of the pose data
 
         Args:
-            ax (Matplotlib axis, optional): Axis on which to plot. If set to None, creates new 
+            ax (Matplotlib axis, optional): Axis on which to plot. If set to None, creates new
                 axis. Defaults to None.
             dt (float, optional): Time separation between points if t is not provided.
                 Defaults to .1.
             t (List[float], optional): List of times to plot points. Defaults to None.
-            t0 (float, optional): First point to plot. If t0 and t are not provided, uses 
+            t0 (float, optional): First point to plot. If t0 and t are not provided, uses
                 PoseData's t0. Defaults to None.
-            tf (float, optional): Last point to plot. If tf and t are not provided, uses 
+            tf (float, optional): Last point to plot. If tf and t are not provided, uses
                 PoseData's tf. Defaults to None.
             pose (bool, optional): Whether to plot poses (as coordinate frames). Defaults to False.
-            trajectory (bool, optional): Whether to plot the trajectory as points. Defaults to 
+            trajectory (bool, optional): Whether to plot the trajectory as points. Defaults to
                 True.
-            axis_len (float, optional): Length of the axes of coordinate frames if plotting poses. 
+            axis_len (float, optional): Length of the axes of coordinate frames if plotting poses.
                 Defaults to 1.0.
 
         Returns:
             Matplotlib axis: axis on which plotting was done
         """
-        
+
         if ax is None:
             ax = plt.figure().add_subplot(projection='3d')
         t = self._get_time_array(t=t, dt=dt, t0=t0, tf=tf)
-        
+
         if trajectory:
             positions = np.array([self.position(ti) for ti in t])
             ax.plot(positions[:,0], positions[:,1], positions[:,2])
-            
+
         if pose:
             for ti in t:
                 for rob_ax, color in zip([0, 1, 2], ['red', 'green', 'blue']):
                     T_WB = self.T_WB(ti)
-                    ax.plot([T_WB[0,3], T_WB[0,3] + axis_len*T_WB[0,rob_ax]], 
-                            [T_WB[1,3], T_WB[1,3] + axis_len*T_WB[1,rob_ax]], 
-                            [T_WB[2,3], T_WB[2,3] + axis_len*T_WB[2,rob_ax]], 
+                    ax.plot([T_WB[0,3], T_WB[0,3] + axis_len*T_WB[0,rob_ax]],
+                            [T_WB[1,3], T_WB[1,3] + axis_len*T_WB[1,rob_ax]],
+                            [T_WB[2,3], T_WB[2,3] + axis_len*T_WB[2,rob_ax]],
                             color=color)
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_zlabel('z')
         ax.set_aspect('equal')
+        return ax
+    
+    def plot_over_time(self, dt: float = .1, t: List[float] = None, t0: float = None, tf: float = None,
+                       axes='all', ax=None):
+        """
+        Plots the position and orientation data over time.
+
+        Args:
+            dt (float, optional): Time separation between points. Defaults to .1.
+            t (List[float], optional): Specific times to be plotted. Defaults to None.
+            t0 (float, optional): Start time if using dt. If None, uses self.t0. Defaults to None.
+            tf (float, optional): End time if using dt. If None, uses self.tf. Defaults to None.
+            axes (str, optional): Choose from ['all', 'xyz', 'rpy', 'x', y', 'z', 'r', 'p', 'y'.
+                If 'all', 'xyz', or 'rpy', cannot provide ax. Defaults to 'all'.
+            ax (Matplotlib ax, optional): Matplotlib ax. Defaults to None.
+        """
+        t = self._get_time_array(t=t, dt=dt, t0=t0, tf=tf)
+
+        assert axes in ['all', 'xyz', 'rpy', 'x', 'y', 'z', 'r', 'p', 'y'], \
+            "axes must be one of ['all', 'xyz', 'rpy', 'x', y', 'z', 'r', 'p', 'y']"
+        assert axes not in ['all', 'xyz', 'rpy'] or ax is None, \
+            "Cannot provide ax if axes is 'all', 'xyz', or 'rpy'"
+        
+        plot_positions = False
+        plot_rotations = False
+        if axes in ['all', 'xyz', 'rpy']:
+            num_ax = 6 if axes == 'all' else 3
+            if axes == 'all':
+                axes_idx = [0, 1, 2, 3, 4, 5]
+            elif axes == 'xyz':
+                axes_idx = [0, 1, 2]
+            else: # rpy
+                axes_idx = [3, 4, 5]
+            plot_positions = axes in ['all', 'xyz']
+            plot_rotations = axes in ['all', 'rpy']
+        else:
+            num_ax = 1
+            axes_idx = np.where(np.array(list('xyzrpy')) == axes)[0].tolist()
+            plot_positions = axes_idx[0] in [0, 1, 2]
+            plot_rotations = axes_idx[0] in [3, 4, 5]
+
+        if ax is None:
+            fig, ax = plt.subplots(num_ax, 1)
+
+        if plot_positions:
+            positions = np.array([self.position(ti) for ti in t])
+            vals = positions
+        if plot_rotations:
+            quats = np.array([self.orientation(ti) for ti in t])
+            rpys = Rot.from_quat(quats).as_euler('ZYX', degrees=True)[:,::-1]
+            if plot_positions:
+                vals = np.hstack([positions, rpys])
+            else:
+                vals = rpys
+
+        for i, ax_idx in enumerate(axes_idx):
+            ax_i = ax if num_ax == 1 else ax[i]
+            ax_i.plot(t, vals[:,ax_idx])
+            ax_i.set_xlabel('time (s)')
+            ax_i.set_ylabel(['x', 'y', 'z', 'roll', 'pitch', 'yaw'][ax_idx])
+            ax_i.grid(True)
         return ax
 
     def to_evo(self):
@@ -648,16 +774,16 @@ class PoseData(RobotData):
             assert False, "Cannot convert transformed poses to evo PoseTrajectory3D"
         quat_wxyz = self.orientations[:, [3,0,1,2]]
         return evo.core.trajectory.PoseTrajectory3D(self.positions, quat_wxyz, self.times)
-    
+
     def to_csv(self, path, csv_options=KIMERA_MULTI_GT_CSV_OPTIONS):
         """
         Converts the PoseData object to a csv file.
-        
+
         Args:
             path (str): Path to save the csv file
-            csv_options (dict): Can include dict of structure: dict['col'], dict['col_nums'] which 
-                map to dicts containing keys of 'time', 'position', and 'orientation' and the 
-                corresponding column names and numbers. csv_options['timescale'] can be given if 
+            csv_options (dict): Can include dict of structure: dict['col'], dict['col_nums'] which
+                map to dicts containing keys of 'time', 'position', and 'orientation' and the
+                corresponding column names and numbers. csv_options['timescale'] can be given if
                 the time column is not in seconds.
         """
         assert csv_options == KIMERA_MULTI_GT_CSV_OPTIONS, \
@@ -672,10 +798,10 @@ class PoseData(RobotData):
             data_names += f",{p}"
         for o in csv_options['cols']['orientation']:
             data_names += f",{o}"
-        data = np.rec.fromarrays([times, transforms[:,0,3], transforms[:,1,3], transforms[:,2,3], 
-                        orientations[:,3], orientations[:,0], orientations[:,1], orientations[:,2]], 
+        data = np.rec.fromarrays([times, transforms[:,0,3], transforms[:,1,3], transforms[:,2,3],
+                        orientations[:,3], orientations[:,0], orientations[:,1], orientations[:,2]],
                         names=data_names)
-        
+
         with open(path, 'w') as f:
             writer = csv.writer(f)
             writer.writerow(data.dtype.names)
@@ -686,7 +812,7 @@ class PoseData(RobotData):
         """
         Extracts a static transform from a ROS bag file. Differs from static_tf_from_bag in that
         the parent need not be ancestor of the child in the tf tree. Transform is returned as T^parent_child,
-        where T is a 4x4 rigid body transform and expresses the pose of the child in the parent frame, 
+        where T is a 4x4 rigid body transform and expresses the pose of the child in the parent frame,
         which is equivalent to the transformation from the child frame to the parent frame.
 
         Args:
@@ -695,14 +821,14 @@ class PoseData(RobotData):
 
         Returns:
             np.array, shape(4,4): static transform
-        """  
+        """
         tf_tree = cls.static_tf_dict_from_bag(path)
 
         tf_roots = []
         for _, (parent_frame_id, _) in tf_tree.items():
             if parent_frame_id not in tf_tree:
                 tf_roots.append(parent_frame_id)
-               
+
         assert len(tf_roots) > 0, f'tf_static tree has no root in bag file {path}'
 
         for tf_root in tf_roots:
@@ -711,19 +837,19 @@ class PoseData(RobotData):
                             if parent_frame != tf_root else np.eye(4)
                 T_root_f2 = PoseData.static_tf_from_bag(path, tf_root, child_frame, tf_tree=tf_tree) \
                             if child_frame != tf_root else np.eye(4)
-                
+
                 return np.linalg.inv(T_root_f1) @ T_root_f2
             except:
                 continue
 
         assert False, f'transform lookup from {parent_frame} to {child_frame} failed'
-        
-    
+
+
     @classmethod
     def static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str, tf_tree=None):
         """
         Extracts a static transform from a ROS bag file. Transform is returned as T^parent_child,
-        where T is a 4x4 rigid body transform and expresses the pose of the child in the parent frame, 
+        where T is a 4x4 rigid body transform and expresses the pose of the child in the parent frame,
         which is equivalent to the transformation from the child frame to the parent frame.
 
         Args:
@@ -734,7 +860,7 @@ class PoseData(RobotData):
             np.array, shape(4,4): static transform
         """
         if tf_tree is None: tf_tree = cls.static_tf_dict_from_bag(path)
-                        
+
         if child_frame not in tf_tree:
             assert False, f"child_frame {child_frame} not found in bag file {path}"
 
@@ -747,25 +873,25 @@ class PoseData(RobotData):
                 assert False, f"parent_frame {parent_frame} not found in bag file {path}"
             parent, transform = tf_tree[child]
             Ti = np.eye(4)
-            Ti[:3,:3] = Rot.from_quat([transform.rotation.x, transform.rotation.y, 
+            Ti[:3,:3] = Rot.from_quat([transform.rotation.x, transform.rotation.y,
                                       transform.rotation.z, transform.rotation.w]).as_matrix()
             Ti[:3,3] = [transform.translation.x, transform.translation.y, transform.translation.z]
-            # transform msg is T_child_parent, the pose of the parent in the child frame or the 
+            # transform msg is T_child_parent, the pose of the parent in the child frame or the
             # transform from parent to child we want in the form T_parent_child so invert
             # actually it seems like this is not true (ROS documentation is a bit confusing)
             # Ti = np.linalg.inv(Ti)
             T_chain.insert(0, Ti)
             child = parent
-            
+
         T = np.eye(4)
         for Ti in T_chain:
             T = T @ Ti
-        
+
         return T
-    
+
     @classmethod
     def static_tf_dict_from_bag(cls, path: str):
-        """Returns a dictionary of static transforms from a ROS bag file. The dictionary maps 
+        """Returns a dictionary of static transforms from a ROS bag file. The dictionary maps
         child_frame_id to a tuple of (parent_frame_id, transform_msg).
 
         Args:
@@ -784,20 +910,20 @@ class PoseData(RobotData):
                 if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
                     for transform_msg in msg.transforms:
                         # ignore a transform from a frame to itself
-                        if transform_msg.header.frame_id == transform_msg.child_frame_id: 
+                        if transform_msg.header.frame_id == transform_msg.child_frame_id:
                             continue
                         tf_tree[transform_msg.child_frame_id] = (transform_msg.header.frame_id, transform_msg.transform)
         return tf_tree
-    
+
     @classmethod
     def _tf_tree_from_bag(cls, path: str):
         """
-        Returns a dict where each key is a child frame id and the value is a tuple including the parent frame id and 
+        Returns a dict where each key is a child frame id and the value is a tuple including the parent frame id and
         whether the tf is static or dynamic.
 
         Args:
             path (str): Path to ROS bag.
-            
+
         Returns:
             dict: tf tree dictionary
         """
@@ -818,13 +944,13 @@ class PoseData(RobotData):
                             else:
                                 tf_tree[transform_msg.child_frame_id] = (tf_type, transform_msg.header.frame_id)
         return tf_tree
-    
+
     @classmethod
     def _from_bag_single_tf_joint(cls, path: str, parent_frame: str, child_frame: str, **kwargs):
         """
-        Extracts a dynamic transform from a ROS bag file in the form of a PoseData object. 
-        Transform is returned as T^parent_child, where T is a 4x4 rigid body transform and expresses 
-        the pose of the child in the parent frame, which is equivalent to the transformation 
+        Extracts a dynamic transform from a ROS bag file in the form of a PoseData object.
+        Transform is returned as T^parent_child, where T is a 4x4 rigid body transform and expresses
+        the pose of the child in the parent frame, which is equivalent to the transformation
         from the child frame to the parent frame.
 
         Args:
@@ -837,7 +963,7 @@ class PoseData(RobotData):
         times = []
         positions = []
         orientations = []
-        
+
         with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))]) as reader:
             connections = [x for x in reader.connections if x.topic == '/tf']
             if len(connections) == 0:
@@ -848,11 +974,11 @@ class PoseData(RobotData):
                     for transform_msg in msg.transforms:
                         if transform_msg.child_frame_id == child_frame and transform_msg.header.frame_id == parent_frame:
                             times.append(transform_msg.header.stamp.sec + transform_msg.header.stamp.nanosec*1e-9)
-                            positions.append([transform_msg.transform.translation.x, 
-                                              transform_msg.transform.translation.y, 
+                            positions.append([transform_msg.transform.translation.x,
+                                              transform_msg.transform.translation.y,
                                               transform_msg.transform.translation.z])
-                            orientations.append([transform_msg.transform.rotation.x, 
-                                                 transform_msg.transform.rotation.y, 
-                                                 transform_msg.transform.rotation.z, 
+                            orientations.append([transform_msg.transform.rotation.x,
+                                                 transform_msg.transform.rotation.y,
+                                                 transform_msg.transform.rotation.z,
                                                  transform_msg.transform.rotation.w])
         return cls(times, positions, orientations, **kwargs)

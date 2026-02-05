@@ -3,7 +3,7 @@ import numpy as np
 from rosbags.highlevel import AnyReader
 from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
 from robotdatapy.exceptions import NoDataNearTimeException
 
@@ -20,21 +20,21 @@ class RobotData():
         self.interp = interp
         self.causal = causal
         assert not (self.interp and self.causal), "Cannot interpolate and be causal"
-        
+
     def set_t0(self, t0):
         self.times += -self.times[0] + t0
-        
+
     def set_times(self, times):
         self.times = np.array(times)
 
     @property
     def t0(self):
         return self.times[0]
-    
+
     @property
     def tf(self):
         return self.times[-1]
-            
+
     def idx(self, t, force_single=False, force_double=False):
         """
         Finds the index of pose info closes to the desired time.
@@ -63,57 +63,57 @@ class RobotData():
 
         if self.causal:
             idx = op1
-        elif not op1_exists: 
+        elif not op1_exists:
             idx = op2 if not find_double else [op2, op2]
-        elif not op2_exists: 
+        elif not op2_exists:
             idx = op1 if not find_double else [op1, op1]
         elif find_double:
             idx = [op1, op2]
-        elif abs(t - self.times[op1]) < abs(t - self.times[op2]): 
+        elif abs(t - self.times[op1]) < abs(t - self.times[op2]):
             idx = op1
-        else: 
+        else:
             idx = op2
-        
+
         if find_double and (abs(self.times[idx[0]] - t) > self.time_tol or \
                             abs(self.times[idx[1]] - t) > self.time_tol):
-            raise NoDataNearTimeException(t_desired=t, 
+            raise NoDataNearTimeException(t_desired=t,
                                           t_closest=[self.times[idx[0]], self.times[idx[1]]])
         elif find_double:
             return idx
         # check to make sure found time is close enough
         elif abs(self.times[idx] - t) > self.time_tol:
             raise NoDataNearTimeException(t_desired=t, t_closest=self.times[idx])
-        else: 
+        else:
             return idx
-        
+
     def get_val(self, vals, t, **kwargs):
         idx = self.idx(t, **kwargs)
         return vals[idx]
-    
+
     def nearest_time(self, t, force_double=False) -> float:
         """
         Returns the time nearest to the desired time.
 
         Args:
             t (float): Desired time.
-            force_double (bool, optional): If set to true, will return the two nearest times 
+            force_double (bool, optional): If set to true, will return the two nearest times
                 (on plus and minus side). Defaults to False.
 
         Returns:
             float: Nearest time in the data.
         """
         return self.get_val(self.times, t, force_single=not force_double)
-    
+
     def clip(self, t0, tf):
         assert False, "clip function not implemented for this data type."
-        
+
     def __len__(self):
         return len(self.times)
-    
+
     @classmethod
     def topic_t0(cls, bag, topic):
         return RobotData._first_topic_t(bag, topic, reverse=False)
-            
+
     @classmethod
     def topic_tf(cls, bag, topic):
         return RobotData._first_topic_t(bag, topic, reverse=True)
@@ -158,7 +158,41 @@ class RobotData():
                 last_time = max(last_time, t)
 
         return (first_time, last_time)
-    
+
+    @classmethod
+    def bag_t_range(cls, bag):
+        """
+        Get the time range of the entire bag using chunk metadata.
+
+        This is much faster than topic_t_range because it uses the bag's
+        index metadata rather than iterating through all messages.
+
+        Args:
+            bag: Path to the bag file.
+
+        Returns:
+            Tuple of (start_time, end_time) in seconds.
+        """
+        with AnyReader([Path(bag)]) as reader:
+            # start_time and end_time are in nanoseconds
+            return (reader.start_time * 1e-9, reader.end_time * 1e-9)
+
+    @classmethod
+    def get_absolute_bag_time(cls, bag, relative_time: Union[float, np.ndarray]):
+        """
+        Convert a relative time (offset from bag start) to an absolute timestamp.
+
+        Args:
+            bag: Path to the bag file.
+            relative_time (Union[float, np.ndarray]): Time relative to the bag start.
+                Can be a single float or a numpy array of times.
+
+        Returns:
+            Absolute time(s) in seconds. Same type as relative_time input.
+        """
+        bag_start = cls.bag_t_range(bag)[0]
+        return bag_start + relative_time
+
     @classmethod
     def _register_custom_msg_types(cls, custom_msg_types, custom_msg_paths, typestore):
         """
@@ -173,10 +207,10 @@ class RobotData():
             custom_msg_paths = [custom_msg_paths]
         add_types = {}
         for msg_type, msg_path in zip(custom_msg_types, custom_msg_paths):
-            add_types.update(get_types_from_msg(Path(msg_path).read_text(), msg_type)) 
+            add_types.update(get_types_from_msg(Path(msg_path).read_text(), msg_type))
         typestore.register(add_types)
         return typestore
-    
+
     def _get_time_array(self, t: List[float], dt: float, t0: float, tf: float) -> np.ndarray:
         """
         Given some timing options, a numpy array of times (e.g., used for plotting) are returned
@@ -194,11 +228,12 @@ class RobotData():
         Returns:
             np.ndarray: List of times
         """
+        assert t is None or (t0 is None and tf is None), "t and t0/tf cannot be given together"
         if t0 is None and t is None:
             t0 = self.t0
         if tf is None and t is None:
             tf = self.tf
-            
+
         if t is not None:
             return t
         else:
