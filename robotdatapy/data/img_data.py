@@ -101,7 +101,7 @@ class ImgData(RobotData):
     @classmethod
     def from_bag(cls, path, topic, camera_info_topic=None, time_range=None, time_range_relative=False,
                  time_tol=.1, causal=False, t0=None, compressed=True, color_space=None,
-                 compressed_rvl=False):
+                 compressed_rvl=False, stride=1):
         """
         Creates ImgData object from bag file
 
@@ -119,6 +119,8 @@ class ImgData(RobotData):
             t0 (float, optional): Local time at the first msg. If not set, uses global time from
                 the data_path. Defaults to None.
             compressed (bool, optional): True if data_path contains compressed images
+            stride (int, optional): Keep every nth frame. stride=1 keeps all frames, stride=3
+                keeps every 3rd frame. Useful for reducing memory usage. Defaults to 1.
         """
         if time_range is not None:
             assert time_range[0] < time_range[1], "time_range must be given in incrementing order"
@@ -137,10 +139,12 @@ class ImgData(RobotData):
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 raise MsgNotFound(topic, path)
-            for (connection, timestamp, rawdata) in reader.messages(
+            for frame_idx, (connection, timestamp, rawdata) in enumerate(reader.messages(
                 connections=connections, start=start_ns, stop=stop_ns
-            ):
+            )):
                 if connection.topic != topic:
+                    continue
+                if frame_idx % stride:
                     continue
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
