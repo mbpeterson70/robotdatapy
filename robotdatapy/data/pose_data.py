@@ -125,7 +125,7 @@ class PoseData(RobotData):
 
     @classmethod
     def from_csv(cls, path, csv_options=DEFAULT_GT_OPTIONS, interp=True, causal=False, time_tol=.1,
-                 t0=None, T_premultiply=None, T_postmultiply=None):
+                 t0=None, T_premultiply=None, T_postmultiply=None, time_range=None, time_range_relative=False):
         """
         Extracts pose data from csv file with 9 columns for time (sec/nanosec), position, and orientation
 
@@ -142,6 +142,8 @@ class PoseData(RobotData):
                 the data_file. Defaults to None.
             T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
+            time_range (list, optional): Time range to filter the poses. Defaults to None.
+            time_range_relative (bool, optional): Whether the time range is relative to t0. Defaults to False.
         """
         path = os.path.expanduser(os.path.expandvars(path))
         if csv_options is None:
@@ -166,6 +168,14 @@ class PoseData(RobotData):
 
         if 'timescale' in csv_options:
             times *= csv_options['timescale']
+            
+        if time_range is not None:
+            if time_range_relative:
+                time_range = [times[0] + time_range[0], times[0] + time_range[1]]
+            time_mask = (times >= time_range[0]) & (times <= time_range[1])
+            times = times[time_mask]
+            positions = positions[time_mask]
+            orientations = orientations[time_mask]
 
         return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol,
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
@@ -274,7 +284,7 @@ class PoseData(RobotData):
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
 
     @classmethod
-    def from_bag_tf(cls, path: str, parent_frame: str, child_frame: str, **kwargs):
+    def from_bag_tf(cls, path: str, parent_frame: str, child_frame: str, time_range=None, time_range_relative=False, **kwargs):
         """
         Create a PoseData object from a ROS bag file using tf (/tf, /tf_static topic) messages.
 
@@ -283,10 +293,19 @@ class PoseData(RobotData):
             parent_frame (str): parent frame
             child_frame (str): child frame
             kwargs: Additional arguments to pass to from_bag
+            time_range (list, shape=(2,), optional): Two element list indicating range of times
+                that should be stored within object.
+            time_range_relative (bool, optional): If True, time_range is interpreted as relative
+                to the bag start time. Defaults to False.
+
 
         Returns:
             PoseData: PoseData object
         """
+        # Convert relative time_range to absolute if needed
+        if time_range is not None and time_range_relative:
+            time_range = cls.get_absolute_bag_time(path, np.array(time_range)).tolist()
+
         tf_tree = cls._tf_tree_from_bag(path)
         frame_chain = [child_frame]
         tf_types = []
@@ -319,6 +338,9 @@ class PoseData(RobotData):
                 times = T_parent_child[joint_i].times
                 break
         assert len(times) > 0, "no times found"
+
+        # TODO: handle time range more efficiently
+        times = [t for t in times if (time_range is None or (t >= time_range[0] and t <= time_range[1]))]
 
         poses = []
         for t in times:
@@ -712,19 +734,17 @@ class PoseData(RobotData):
             t (List[float], optional): Specific times to be plotted. Defaults to None.
             t0 (float, optional): Start time if using dt. If None, uses self.t0. Defaults to None.
             tf (float, optional): End time if using dt. If None, uses self.tf. Defaults to None.
-            axes (str, optional): Choose from ['all', 'xyz', 'rpy', 'x', y', 'z', 'r', 'p', 'y'.
+            axes (str, optional): Choose from ['all', 'xyz', 'rpy', 'x', y', 'z', 'roll', 'pitch', 'yaw'.
                 If 'all', 'xyz', or 'rpy', cannot provide ax. Defaults to 'all'.
             ax (Matplotlib ax, optional): Matplotlib ax. Defaults to None.
         """
         t = self._get_time_array(t=t, dt=dt, t0=t0, tf=tf)
 
-        assert axes in ['all', 'xyz', 'rpy', 'x', 'y', 'z', 'r', 'p', 'y'], \
-            "axes must be one of ['all', 'xyz', 'rpy', 'x', y', 'z', 'r', 'p', 'y']"
+        assert axes in ['all', 'xyz', 'rpy', 'x', 'y', 'z', 'roll', 'pitch', 'yaw'], \
+            "axes must be one of ['all', 'xyz', 'rpy', 'x', y', 'z', 'roll', 'pitch', 'yaw']"
         assert axes not in ['all', 'xyz', 'rpy'] or ax is None, \
             "Cannot provide ax if axes is 'all', 'xyz', or 'rpy'"
         
-        plot_positions = False
-        plot_rotations = False
         if axes in ['all', 'xyz', 'rpy']:
             num_ax = 6 if axes == 'all' else 3
             if axes == 'all':
@@ -733,33 +753,23 @@ class PoseData(RobotData):
                 axes_idx = [0, 1, 2]
             else: # rpy
                 axes_idx = [3, 4, 5]
-            plot_positions = axes in ['all', 'xyz']
-            plot_rotations = axes in ['all', 'rpy']
         else:
             num_ax = 1
-            axes_idx = np.where(np.array(list('xyzrpy')) == axes)[0].tolist()
-            plot_positions = axes_idx[0] in [0, 1, 2]
-            plot_rotations = axes_idx[0] in [3, 4, 5]
+            axes_idx = np.where(np.array(['x', 'y', 'z', 'roll', 'pitch', 'yaw']) == axes)[0].tolist()
 
         if ax is None:
             fig, ax = plt.subplots(num_ax, 1)
 
-        if plot_positions:
-            positions = np.array([self.position(ti) for ti in t])
-            vals = positions
-        if plot_rotations:
-            quats = np.array([self.orientation(ti) for ti in t])
-            rpys = Rot.from_quat(quats).as_euler('ZYX', degrees=True)[:,::-1]
-            if plot_positions:
-                vals = np.hstack([positions, rpys])
-            else:
-                vals = rpys
+        positions = np.array([self.position(ti) for ti in t])
+        quats = np.array([self.orientation(ti) for ti in t])
+        rpys = Rot.from_quat(quats).as_euler('ZYX', degrees=True)[:,::-1]
+        vals = np.hstack([positions, rpys])
 
         for i, ax_idx in enumerate(axes_idx):
             ax_i = ax if num_ax == 1 else ax[i]
             ax_i.plot(t, vals[:,ax_idx])
             ax_i.set_xlabel('time (s)')
-            ax_i.set_ylabel(['x', 'y', 'z', 'roll', 'pitch', 'yaw'][ax_idx])
+            ax_i.set_ylabel(['x (m)', 'y (m)', 'z (m)', 'roll (deg)', 'pitch (deg)', 'yaw (deg)'][ax_idx])
             ax_i.grid(True)
         return ax
 
