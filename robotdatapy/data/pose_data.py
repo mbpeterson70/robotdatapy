@@ -206,7 +206,8 @@ class PoseData(RobotData):
         T_premultiply: np.array = None,
         T_postmultiply: np.array = None,
         time_range: list = None,
-        time_range_relative: bool = False
+        time_range_relative: bool = False,
+        ignore_ros_time: bool = False
     ):
         """
         Create a PoseData object from a ROS bag file. Supports msg types PoseStamped and Odometry.
@@ -226,6 +227,9 @@ class PoseData(RobotData):
                 that should be stored within object.
             time_range_relative (bool, optional): If True, time_range is interpreted as relative
                 to the bag start time. Defaults to False.
+            ignore_ros_time (bool, optional): If True, filter by header timestamps rather than
+                bag recording timestamps. Use for datasets where header time and bag recording
+                time differ significantly. Defaults to False.
 
         Returns:
             PoseData: PoseData object
@@ -237,8 +241,12 @@ class PoseData(RobotData):
             time_range = cls.get_absolute_bag_time(path, np.array(time_range)).tolist()
 
         # Convert time_range from seconds to nanoseconds for rosbags
-        start_ns = int(time_range[0] * 1e9) if time_range is not None else None
-        stop_ns = int(time_range[1] * 1e9) if time_range is not None else None
+        if time_range is not None and not ignore_ros_time:
+            start_ns = int(time_range[0] * 1e9)
+            stop_ns = int(time_range[1] * 1e9)
+        else:
+            start_ns = None
+            stop_ns = None
 
         times = []
         positions = []
@@ -254,8 +262,11 @@ class PoseData(RobotData):
                 connections=connections, start=start_ns, stop=stop_ns
             ):
                 msg = reader.deserialize(rawdata, connection.msgtype)
+                t_msg = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
+                if ignore_ros_time and time_range is not None and (t_msg < time_range[0] or t_msg > time_range[1]):
+                    continue
                 if t0 is None:
-                    t0 = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
+                    t0 = t_msg
                 if type(msg).__name__ == 'geometry_msgs__msg__PoseStamped':
                     pose = msg.pose
                 elif type(msg).__name__ == 'nav_msgs__msg__Odometry':
@@ -947,10 +958,12 @@ class PoseData(RobotData):
                         for transform_msg in msg.transforms:
                             # if has appeared multiple times, check that the parent is the same
                             if transform_msg.child_frame_id in tf_tree:
-                                assert tf_tree[transform_msg.child_frame_id][1] == transform_msg.header.frame_id, \
-                                    f"child frame {transform_msg.child_frame_id} has multiple parents"
-                                assert tf_tree[transform_msg.child_frame_id][0] == tf_type, \
-                                    f"child frame {transform_msg.child_frame_id} has multiple tf types"
+                                if tf_tree[transform_msg.child_frame_id][1] != transform_msg.header.frame_id:
+                                    print(f"WARNING: child frame {transform_msg.child_frame_id} has multiple parents:" 
+                                          f"{tf_tree[transform_msg.child_frame_id][1]} and {transform_msg.header.frame_id}")
+                                if tf_tree[transform_msg.child_frame_id][0] != tf_type:
+                                    print(f"WARNING: child frame {transform_msg.child_frame_id} has multiple tf types:" 
+                                          f"{tf_tree[transform_msg.child_frame_id][0]} and {tf_type}")
                             else:
                                 tf_tree[transform_msg.child_frame_id] = (tf_type, transform_msg.header.frame_id)
         return tf_tree

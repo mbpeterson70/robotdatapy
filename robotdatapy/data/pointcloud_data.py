@@ -284,7 +284,7 @@ class PointCloudData(RobotData):
 
     @classmethod
     def from_bag(cls, path, topic, causal=False, time_tol=.1, t0=None, time_range=None,
-                 time_range_relative=False):
+                 time_range_relative=False, ignore_ros_time=False):
         """
         Creates PointCloudData object from ROS1/ROS2 bag file
 
@@ -299,6 +299,9 @@ class PointCloudData(RobotData):
                 that should be stored within object
             time_range_relative (bool, optional): If True, time_range is interpreted as relative
                 to the bag start time. Defaults to False.
+            ignore_ros_time (bool, optional): If True, filter by header timestamps rather than
+                bag recording timestamps. Use for datasets where header time and bag recording
+                time differ significantly. Defaults to False.
         """
         if time_range is not None:
             assert time_range[0] < time_range[1], "time_range must be given in incrementing order"
@@ -308,8 +311,12 @@ class PointCloudData(RobotData):
             time_range = cls.get_absolute_bag_time(path, np.array(time_range)).tolist()
 
         # Convert time_range from seconds to nanoseconds for rosbags
-        start_ns = int(time_range[0] * 1e9) if time_range is not None else None
-        stop_ns = int(time_range[1] * 1e9) if time_range is not None else None
+        if time_range is not None and not ignore_ros_time:
+            start_ns = int(time_range[0] * 1e9)
+            stop_ns = int(time_range[1] * 1e9)
+        else:
+            start_ns = None
+            stop_ns = None
 
         times = []
         pcds = []
@@ -325,6 +332,8 @@ class PointCloudData(RobotData):
                 if connection.topic != topic:
                     continue
                 t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
+                if ignore_ros_time and time_range is not None and (t < time_range[0] or t > time_range[1]):
+                    continue
                 times.append(t)
 
                 pcds.append(msg)
