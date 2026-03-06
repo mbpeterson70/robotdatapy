@@ -101,7 +101,7 @@ class ImgData(RobotData):
     @classmethod
     def from_bag(cls, path, topic, camera_info_topic=None, time_range=None, time_range_relative=False,
                  time_tol=.1, causal=False, t0=None, compressed=True, color_space=None,
-                 compressed_rvl=False, stride=1):
+                 compressed_rvl=False, stride=1, ignore_ros_time=False):
         """
         Creates ImgData object from bag file
 
@@ -130,8 +130,12 @@ class ImgData(RobotData):
             time_range = cls.get_absolute_bag_time(path, np.array(time_range)).tolist()
 
         # Convert time_range from seconds to nanoseconds for rosbags
-        start_ns = int(time_range[0] * 1e9) if time_range is not None else None
-        stop_ns = int(time_range[1] * 1e9) if time_range is not None else None
+        if time_range is not None and not ignore_ros_time:
+            start_ns = int(time_range[0] * 1e9)
+            stop_ns = int(time_range[1] * 1e9)
+        else:
+            start_ns = None
+            stop_ns = None
 
         times = []
         img_msgs = []
@@ -148,6 +152,11 @@ class ImgData(RobotData):
                     continue
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
+                if (
+                    ignore_ros_time and time_range is not None 
+                    and (t < time_range[0] or t > time_range[1])
+                ):
+                    continue
 
                 times.append(t)
                 img_msgs.append(msg)
