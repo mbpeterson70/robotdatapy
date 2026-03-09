@@ -13,7 +13,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check if robotdatapy source was changed
+        id: source_changed
+        run: |
+          git fetch origin main
+          CHANGED=$(git diff --name-only origin/main...HEAD -- robotdatapy/)
+          if [ -z "$CHANGED" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes to robotdatapy/ — skipping version check"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Changes detected in robotdatapy/:"
+            echo "$CHANGED"
+          fi
+
       - name: Get version from PR branch
+        if: steps.source_changed.outputs.changed == 'true'
         id: pr_version
         run: |
           PR_VERSION=$(grep -Po "version=['\"]\\K[^'\"]*" setup.py)
@@ -21,6 +36,7 @@ jobs:
           echo "PR version: $PR_VERSION"
 
       - name: Get version from main branch
+        if: steps.source_changed.outputs.changed == 'true'
         id: main_version
         run: |
           git fetch origin main
@@ -29,6 +45,7 @@ jobs:
           echo "Main version: $MAIN_VERSION"
 
       - name: Compare versions
+        if: steps.source_changed.outputs.changed == 'true'
         run: |
           PR_VERSION="${{ steps.pr_version.outputs.version }}"
           MAIN_VERSION="${{ steps.main_version.outputs.version }}"
