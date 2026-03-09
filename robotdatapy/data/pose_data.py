@@ -643,15 +643,26 @@ class PoseData(RobotData):
         """
         return np.sum(np.linalg.norm(np.diff(self.positions, axis=0), axis=1))
 
-    def plot2d(self, ax=None, dt=.1, t=None, t0=None, tf=None, axes='xy', pose=False, trajectory=True, axis_len=1.0, **kwargs):
+    def plot2d(self, ax=None, dt=.1, t=None, t0=None, tf=None, axes='xy', 
+        pose=False, trajectory=True, axis_len=1.0, **kwargs
+    ) -> plt.Axes:
         """
         Plots the position data in 2D
 
         Args:
             ax (matplotlib.axes._subplots.AxesSubplot): axis to plot on. Defaults to None.
+            dt (float, optional): time step to plot at if t is not provided. Defaults to .1.
+            t (List[float], optional): list of times to plot. Uses dt, t0, and tf if not provided.
+                Defaults to None.
             t0 (float, optional): start time. Defaults to self.t0.
             tf (float, optional): end time. Defaults to self.tf.
             axes (str, optional): axes to plot. Defaults to 'xy'.
+            pose (bool, optional): whether to plot poses as coordinate frames. Defaults to False.
+            trajectory (bool, optional): whether to plot trajectory as points. Defaults to True.
+            axis_len (float, optional): length of the axes if plotting poses. Defaults to 1.0.
+
+        Returns:
+            matplotlib.axes._subplots.AxesSubplot: axis that was plotted on
         """
         assert trajectory or pose, "Must request plotting trajectory and/or pose"
 

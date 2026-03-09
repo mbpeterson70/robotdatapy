@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(
     name='robotdatapy',
-    version='1.1.8',
+    version='1.1.9',
     description='Python package for interfacing with robot data',
     long_description=long_description,
     long_description_content_type="text/markdown",
