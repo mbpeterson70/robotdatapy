@@ -284,7 +284,7 @@ class PointCloudData(RobotData):
 
     @classmethod
     def from_bag(cls, path, topic, causal=False, time_tol=.1, t0=None, time_range=None,
-                 time_range_relative=False, ignore_ros_time=False):
+                 time_range_relative=False, ignore_ros_time=False, ros_distro=None):
         """
         Creates PointCloudData object from ROS1/ROS2 bag file
 
@@ -302,7 +302,19 @@ class PointCloudData(RobotData):
             ignore_ros_time (bool, optional): If True, filter by header timestamps rather than
                 bag recording timestamps. Use for datasets where header time and bag recording
                 time differ significantly. Defaults to False.
+            ros_distro (str, optional): ROS Distro: ['foxy', 'humble', 'jazzy']. Defaults to 'jazzy'.
         """
+        if ros_distro is None:
+            typestore = None
+        elif ros_distro == 'foxy':
+            typestore = get_typestore(Stores.ROS2_FOXY)
+        elif ros_distro == 'humble':
+            typestore = get_typestore(Stores.ROS2_HUMBLE)
+        elif ros_distro == 'jazzy':
+            typestore = get_typestore(Stores.ROS2_JAZZY)
+        else:
+            raise ValueError("ros_distro must be one of ['foxy', 'humble', 'jazzy']")
+        
         if time_range is not None:
             assert time_range[0] < time_range[1], "time_range must be given in incrementing order"
 
@@ -320,7 +332,7 @@ class PointCloudData(RobotData):
 
         times = []
         pcds = []
-        with AnyReader([Path(path)]) as reader:
+        with AnyReader([Path(path)], default_typestore=typestore) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {path}"
