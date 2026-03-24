@@ -21,6 +21,7 @@ from rosbags.highlevel import AnyReader
 from pathlib import Path
 import matplotlib.pyplot as plt
 import pykitti
+import utm
 import cv2
 import evo
 import csv
@@ -43,6 +44,20 @@ DEFAULT_GT_OPTIONS = {
     'timescale': 1e-9
 }
 KIMERA_MULTI_GT_CSV_OPTIONS = DEFAULT_GT_OPTIONS
+
+KITTI_ODOM_TO_RAW = {
+    '00': ('2011_10_03', '0027', 0, 4540),
+    '01': ('2011_10_03', '0042', 0, 1100),
+    '02': ('2011_10_03', '0034', 0, 4660),
+    '03': ('2011_09_26', '0067', 0, 800),
+    '04': ('2011_09_30', '0016', 0, 270),
+    '05': ('2011_09_30', '0018', 0, 2760),
+    '06': ('2011_09_30', '0020', 0, 1100),
+    '07': ('2011_09_30', '0027', 0, 1100),
+    '08': ('2011_09_30', '0028', 1100, 5170),
+    '09': ('2011_09_30', '0033', 0, 1590),
+    '10': ('2011_09_30', '0034', 0, 1200),
+}
 
 class PoseData(RobotData):
     """
@@ -100,6 +115,8 @@ class PoseData(RobotData):
             return cls.from_csv(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
         elif pose_data_dict['type'] == 'kitti':
             return cls.from_kitti(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
+        elif pose_data_dict['type'] == 'kitti_raw':
+            return cls.from_kitti_raw(**{k: v for k, v in pose_data_dict.items() if k != 'type'})
         else:
             raise ValueError("Invalid pose data type")
 
@@ -412,6 +429,75 @@ class PoseData(RobotData):
         k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(P2)
         T_recorded_body = np.vstack([np.hstack([r, t[:3]]), np.asarray([0, 0, 0, 1])])
         T_postmultiply = T_recorded_body
+
+        return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol,
+                   t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
+
+    @classmethod
+    def from_kitti_raw(cls, path, date=None, drive=None, kitti_sequence=None,
+                       dataset_type='sync', frames=None,
+                       interp=False, causal=False, time_tol=.1, t0=None,
+                       T_premultiply=None, T_postmultiply=None):
+        """
+        Create a PoseData object from a KITTI raw dataset with UTM poses.
+
+        Uses OXTS/GPS data to produce poses in a UTM coordinate frame (euclidean,
+        globally referenced), unlike from_kitti() which uses an arbitrary local frame.
+
+        Args:
+            path (str): Path to directory that contains KITTI raw data.
+            date (str, optional): Date of the drive (e.g., '2011_10_03').
+            drive (str, optional): Drive number (e.g., '0027').
+            kitti_sequence (str, optional): Odometry sequence number (e.g., '00').
+                Mutually exclusive with date/drive. Auto-selects date, drive, and
+                frame range so timestamps align with from_kitti().
+            dataset_type (str): 'sync' or 'extract'. Defaults to 'sync'.
+            frames (range, optional): Frame range to load (e.g., range(0, 100)).
+            interp (bool): interpolate between closest times, else choose the closest time.
+            causal (bool): If True, only use past data for interpolation.
+            time_tol (float, optional): Tolerance used when finding a pose at a specific time.
+                Defaults to .1.
+            t0 (float, optional): Local time at the first msg. Defaults to None.
+            T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
+            T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
+                Defaults to T_cam2_imu (IMU to left RGB camera frame).
+
+        Returns:
+            PoseData: PoseData object
+        """
+        if kitti_sequence is not None:
+            if date is not None or drive is not None:
+                raise ValueError("Cannot specify both kitti_sequence and date/drive")
+            if kitti_sequence not in KITTI_ODOM_TO_RAW:
+                raise ValueError(f"Unknown sequence '{kitti_sequence}'. Known: {list(KITTI_ODOM_TO_RAW.keys())}")
+            date, drive, start, end = KITTI_ODOM_TO_RAW[kitti_sequence]
+            if frames is None:
+                frames = range(start, end + 1)
+        elif date is None or drive is None:
+            raise ValueError("Must specify either kitti_sequence or both date and drive")
+
+        data_file = os.path.expanduser(os.path.expandvars(path))
+        dataset = pykitti.raw(data_file, date, drive, dataset=dataset_type, frames=frames)
+
+        # Extract lat/lon/alt and convert to UTM
+        lats = np.array([o.packet.lat for o in dataset.oxts])
+        lons = np.array([o.packet.lon for o in dataset.oxts])
+        alts = np.array([o.packet.alt for o in dataset.oxts])
+        eastings, northings, _, _ = utm.from_latlon(lats, lons)
+        positions = np.column_stack([eastings, northings, alts])
+
+        # Build orientations from roll/pitch/yaw
+        orientations = np.array([
+            Rot.as_quat(Rot.from_euler('xyz', [o.packet.roll, o.packet.pitch, o.packet.yaw]))
+            for o in dataset.oxts
+        ])
+
+        # Timestamps
+        times = np.array([(t - dataset.timestamps[0]).total_seconds() for t in dataset.timestamps])
+
+        # Default T_postmultiply: IMU to cam2 (left RGB), matching from_kitti convention
+        if T_postmultiply is None:
+            T_postmultiply = np.linalg.inv(dataset.calib.T_cam2_imu)
 
         return cls(times, positions, orientations, interp=interp, causal=causal, time_tol=time_tol,
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
