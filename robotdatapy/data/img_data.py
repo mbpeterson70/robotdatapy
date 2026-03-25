@@ -3,6 +3,7 @@ import os
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 from dataclasses import dataclass
+from datetime import datetime
 import matplotlib.pyplot as plt
 import concurrent
 
@@ -95,6 +96,8 @@ class ImgData(RobotData):
             return cls.from_zip(**{k: v for k, v in img_data_dict.items() if k != 'type'})
         elif img_data_dict['type'] == 'npz':
             return cls.from_npz(**{k: v for k, v in img_data_dict.items() if k != 'type'})
+        elif img_data_dict['type'] == 'dir' or img_data_dict['type'] == 'directory':
+            return cls.from_directory(**{k: v for k, v in img_data_dict.items() if k != 'type'})
         else:
             raise ValueError(f"Invalid img data type: {img_data_dict['type']}")
             
@@ -236,7 +239,47 @@ class ImgData(RobotData):
         times = data['times']
         imgs = data['imgs']
         return cls(times=times, imgs=imgs, data_type='raw', **kwargs)
+
+    @classmethod
+    def from_directory(cls, path, filename_format, extension='.png', **kwargs):
+        """
+        Load image data from directory
+
+        Args:
+            path (str): File path to directory containing all images
+            filename_format (str): strptime-style format string describing the
+                full filename (without extension). Literal characters are matched
+                exactly; strptime directives (e.g., ``%Y``, ``%H``) parse the
+                timestamp.
+
+                Examples::
+
+                    "%Y-%m-%dT%H:%M:%S"          # 2024-01-15T10:30:00.png
+                    "frame_%Y%m%d_%H%M%S"        # frame_20240115_103000.png
+                    "cam0_%Y-%m-%d-%H-%M-%S-%f"  # cam0_2024-01-15-10-30-00-123456.png
+            extension (str): Image file extension to load
         
+        Returns:
+            ImgData object
+        """
+        path = Path(path)
+        assert path.is_dir(), f"Image directory {path} does not exist!"
+
+        extension = extension if extension.startswith('.') else f".{extension}"
+        times = []
+        imgs = []
+
+        # Assumes ordering from "sorted" is equivalent to time-based ordering
+        for image_path in sorted(path.glob(f"*{extension}")):
+            try:
+                timestamp = datetime.strptime(image_path.stem, filename_format)
+                times.append(timestamp)
+                imgs.append(cv2.imread(image_path))
+            except ValueError:
+                continue  # skip files that don't match expected format
+
+        return cls(times=times, imgs=imgs, data_type='raw', **kwargs)
+
     def to_mp4(self, path, fps=30):
         """
         Save image data to mp4 file
