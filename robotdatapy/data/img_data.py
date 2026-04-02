@@ -2,7 +2,8 @@ import numpy as np
 import os
 from rosbags.highlevel import AnyReader
 from pathlib import Path
-from datetime import datetime
+# from datetime import datetime
+import re
 import matplotlib.pyplot as plt
 
 from robotdatapy.data.robot_data import RobotData
@@ -239,9 +240,10 @@ class ImgData(RobotData):
         return cls(times=times, imgs=imgs, data_type='raw', **kwargs)
 
     @classmethod
-    def from_directory(cls, path, filename_format, extension='.png', **kwargs):
+    def from_directory(cls, path, filename_format, key='timestamp', extension='.png', **kwargs):
         """
         Load image data from directory
+        TODO fix docstring
 
         Args:
             path (str): File path to directory containing all images
@@ -264,19 +266,24 @@ class ImgData(RobotData):
         assert path.is_dir(), f"Image directory {path} does not exist!"
 
         extension = extension if extension.startswith('.') else f".{extension}"
+        pattern = re.compile(filename_format)
         times = []
         imgs = []
 
         # Assumes ordering from "sorted" is equivalent to time-based ordering
         for image_path in sorted(path.glob(f"*{extension}")):
-            try:
-                timestamp = datetime.strptime(image_path.stem, filename_format)
-                times.append(timestamp)
-                imgs.append(cv2.imread(image_path))
-            except ValueError:
-                continue  # skip files that don't match expected format
+            match = pattern.search(image_path.stem)
+            if match and key in match.groupdict():
+                times.append(float(match.group(key)))
+                imgs.append(str(image_path))
+            # try:
+            #     timestamp = datetime.strptime(image_path.stem, filename_format)
+            #     times.append(timestamp)
+            #     imgs.append(cv2.imread(image_path))
+            # except ValueError:
+            #     continue  # skip files that don't match expected format
 
-        return cls(times=times, imgs=imgs, data_type='raw', **kwargs)
+        return cls(times=times, imgs=imgs, data_type='dir', **kwargs)
 
     def to_mp4(self, path, fps=30):
         """
@@ -444,9 +451,17 @@ class ImgData(RobotData):
         
         elif self.data_type == 'raw':
             img = self.imgs[idx]
-            
+
+        elif self.data_type == 'dir':
+            if self.compressed:
+                # TODO this is hard-coded for TartanGround depth image compression
+                img = cv2.imread(self.imgs[idx], cv2.IMREAD_UNCHANGED)
+                img = img.view("<f4").squeeze(-1)  # read 4-channel uint8 as single float32 and drop channel dimension
+            else:
+                img = cv2.imread(self.imgs[idx])
+
         else:
-            raise ValueError("data_type not supported, please choose from: raw, bag, kitti")
+            raise ValueError("data_type not supported, please choose from: raw, dir, bag, kitti")
             
         return img
 
