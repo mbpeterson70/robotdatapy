@@ -302,19 +302,11 @@ class PointCloudData(RobotData):
             ignore_ros_time (bool, optional): If True, filter by header timestamps rather than
                 bag recording timestamps. Use for datasets where header time and bag recording
                 time differ significantly. Defaults to False.
-            ros_distro (str, optional): ROS Distro: ['foxy', 'humble', 'jazzy']. Defaults to 'jazzy'.
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
         """
-        if ros_distro is None:
-            typestore = None
-        elif ros_distro == 'foxy':
-            typestore = get_typestore(Stores.ROS2_FOXY)
-        elif ros_distro == 'humble':
-            typestore = get_typestore(Stores.ROS2_HUMBLE)
-        elif ros_distro == 'jazzy':
-            typestore = get_typestore(Stores.ROS2_JAZZY)
-        else:
-            raise ValueError("ros_distro must be one of ['foxy', 'humble', 'jazzy']")
-        
+        typestore = cls.distro_to_typestore(ros_distro)
+
         if time_range is not None:
             assert time_range[0] < time_range[1], "time_range must be given in incrementing order"
 
@@ -366,19 +358,11 @@ class PointCloudData(RobotData):
             path (str): Path to bag
             topic (str): Topic name
             path_to_livox_msgs (str): Path to livox msgs `msg` directory
-            ros_distro (str, optional): ROS Distro: ['foxy', 'humble', 'jazzy']. Defaults to 'jazzy'.
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
         """
-        if ros_distro is None:
-            typestore = None
-        elif ros_distro == 'foxy':
-            typestore = get_typestore(Stores.ROS2_FOXY)
-        elif ros_distro == 'humble':
-            typestore = get_typestore(Stores.ROS2_HUMBLE)
-        elif ros_distro == 'jazzy':
-            typestore = get_typestore(Stores.ROS2_JAZZY)
-        else:
-            raise ValueError("ros_distro must be one of ['foxy', 'humble', 'jazzy']")
-        
+        typestore = cls.distro_to_typestore(ros_distro)
+
         custom_msg_types = ['livox_ros_driver2/msg/CustomPoint', 'livox_ros_driver2/msg/CustomMsg']
         custom_msg_paths = [f"{path_to_livox_msgs}/CustomPoint.msg",
                             f"{path_to_livox_msgs}/CustomMsg.msg"]

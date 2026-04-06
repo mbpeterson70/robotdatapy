@@ -76,14 +76,34 @@ class GPSData(RobotData):
         topic: str, 
         interp: bool = True, 
         causal: bool = False, 
-        time_tol: float = 1.0, 
-        t0: float = None, 
+        time_tol: float = 1.0,
+        t0: float = None,
+        ros_distro: str = None,
     ):
+        """
+        Create a GPSData object from a ROS bag file.
+
+        Args:
+            path (str): ROS bag file path
+            topic (str): ROS NavSatFix topic
+            interp (bool): interpolate between closest times, else choose the closest time.
+            causal (bool): if True, only use data that is available at the time requested.
+            time_tol (float, optional): Tolerance used when finding data at a specific time.
+                Defaults to 1.0.
+            t0 (float, optional): Local time at the first msg. If not set, uses global time
+                from the bag file. Defaults to None.
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
+
+        Returns:
+            GPSData: GPSData object
+        """
         path = os.path.expanduser(os.path.expandvars(path))
+        typestore = cls.distro_to_typestore(ros_distro)
         times = []
         lat_lon_alts = []
         covariances = []
-        with AnyReader([Path(path)]) as reader:
+        with AnyReader([Path(path)], default_typestore=typestore) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {path}"

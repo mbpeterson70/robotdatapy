@@ -1,6 +1,7 @@
 import numpy as np
 from dataclasses import dataclass
 from rosbags.highlevel import AnyReader
+from rosbags.typesys import Stores, get_typestore
 from pathlib import Path
 
 import cv2
@@ -65,8 +66,18 @@ class CameraParams:
     T: np.array = None
 
     @classmethod
-    def from_bag(cls, file, topic):
-        with AnyReader([Path(file)]) as reader:
+    def from_bag(cls, file, topic, ros_distro=None):
+        if ros_distro is None:
+            typestore = None
+        elif ros_distro == 'foxy':
+            typestore = get_typestore(Stores.ROS2_FOXY)
+        elif ros_distro == 'humble':
+            typestore = get_typestore(Stores.ROS2_HUMBLE)
+        elif ros_distro == 'jazzy':
+            typestore = get_typestore(Stores.ROS2_JAZZY)
+        else:
+            raise ValueError("ros_distro must be one of ['foxy', 'humble', 'jazzy']")
+        with AnyReader([Path(file)], default_typestore=typestore) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {file}"

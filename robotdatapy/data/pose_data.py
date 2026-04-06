@@ -224,7 +224,8 @@ class PoseData(RobotData):
         T_postmultiply: np.array = None,
         time_range: list = None,
         time_range_relative: bool = False,
-        ignore_ros_time: bool = False
+        ignore_ros_time: bool = False,
+        ros_distro: str = None
     ):
         """
         Create a PoseData object from a ROS bag file. Supports msg types PoseStamped and Odometry.
@@ -247,6 +248,8 @@ class PoseData(RobotData):
             ignore_ros_time (bool, optional): If True, filter by header timestamps rather than
                 bag recording timestamps. Use for datasets where header time and bag recording
                 time differ significantly. Defaults to False.
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
 
         Returns:
             PoseData: PoseData object
@@ -265,10 +268,12 @@ class PoseData(RobotData):
             start_ns = None
             stop_ns = None
 
+        typestore = cls.distro_to_typestore(ros_distro)
+
         times = []
         positions = []
         orientations = []
-        with AnyReader([Path(path)]) as reader:
+        with AnyReader([Path(path)], default_typestore=typestore) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {path}"
@@ -312,7 +317,7 @@ class PoseData(RobotData):
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
 
     @classmethod
-    def from_bag_tf(cls, path: str, parent_frame: str, child_frame: str, time_range=None, time_range_relative=False, **kwargs):
+    def from_bag_tf(cls, path: str, parent_frame: str, child_frame: str, time_range=None, time_range_relative=False, ros_distro=None, **kwargs):
         """
         Create a PoseData object from a ROS bag file using tf (/tf, /tf_static topic) messages.
 
@@ -325,7 +330,8 @@ class PoseData(RobotData):
                 that should be stored within object.
             time_range_relative (bool, optional): If True, time_range is interpreted as relative
                 to the bag start time. Defaults to False.
-
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
 
         Returns:
             PoseData: PoseData object
@@ -334,7 +340,7 @@ class PoseData(RobotData):
         if time_range is not None and time_range_relative:
             time_range = cls.get_absolute_bag_time(path, np.array(time_range)).tolist()
 
-        tf_tree = cls._tf_tree_from_bag(path)
+        tf_tree = cls._tf_tree_from_bag(path, ros_distro=ros_distro)
         frame_chain = [child_frame]
         tf_types = []
         T_parent_child = []
@@ -353,10 +359,10 @@ class PoseData(RobotData):
         for joint_i in range(len(tf_types)):
             if tf_types[joint_i] == 'tf_static':
                 T_parent_child.append(cls.static_tf_from_bag(path,
-                    frame_chain[joint_i], frame_chain[joint_i+1]))
+                    frame_chain[joint_i], frame_chain[joint_i+1], ros_distro=ros_distro))
             elif tf_types[joint_i] == 'tf':
                 T_parent_child.append(cls._from_bag_single_tf_joint(path,
-                    frame_chain[joint_i], frame_chain[joint_i+1], **kwargs))
+                    frame_chain[joint_i], frame_chain[joint_i+1], ros_distro=ros_distro, **kwargs))
             else:
                 assert False, "invalid tf type"
 
@@ -926,7 +932,7 @@ class PoseData(RobotData):
             writer.writerows(data)
 
     @classmethod
-    def any_static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str):
+    def any_static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str, ros_distro=None):
         """
         Extracts a static transform from a ROS bag file. Differs from static_tf_from_bag in that
         the parent need not be ancestor of the child in the tf tree. Transform is returned as T^parent_child,
@@ -936,11 +942,13 @@ class PoseData(RobotData):
         Args:
             parent_frame (str): parent frame
             child_frame (str): child frame
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
 
         Returns:
             np.array, shape(4,4): static transform
         """
-        tf_tree = cls.static_tf_dict_from_bag(path)
+        tf_tree = cls.static_tf_dict_from_bag(path, ros_distro=ros_distro)
 
         tf_roots = []
         for _, (parent_frame_id, _) in tf_tree.items():
@@ -951,9 +959,9 @@ class PoseData(RobotData):
 
         for tf_root in tf_roots:
             try:
-                T_root_f1 = PoseData.static_tf_from_bag(path, tf_root, parent_frame, tf_tree=tf_tree) \
+                T_root_f1 = PoseData.static_tf_from_bag(path, tf_root, parent_frame, tf_tree=tf_tree, ros_distro=ros_distro) \
                             if parent_frame != tf_root else np.eye(4)
-                T_root_f2 = PoseData.static_tf_from_bag(path, tf_root, child_frame, tf_tree=tf_tree) \
+                T_root_f2 = PoseData.static_tf_from_bag(path, tf_root, child_frame, tf_tree=tf_tree, ros_distro=ros_distro) \
                             if child_frame != tf_root else np.eye(4)
 
                 return np.linalg.inv(T_root_f1) @ T_root_f2
@@ -964,7 +972,7 @@ class PoseData(RobotData):
 
 
     @classmethod
-    def static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str, tf_tree=None):
+    def static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str, tf_tree=None, ros_distro=None):
         """
         Extracts a static transform from a ROS bag file. Transform is returned as T^parent_child,
         where T is a 4x4 rigid body transform and expresses the pose of the child in the parent frame,
@@ -973,11 +981,14 @@ class PoseData(RobotData):
         Args:
             parent_frame (str): parent frame
             child_frame (str): child frame
+            tf_tree (dict, optional): Pre-computed static transform dictionary. Defaults to None.
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
 
         Returns:
             np.array, shape(4,4): static transform
         """
-        if tf_tree is None: tf_tree = cls.static_tf_dict_from_bag(path)
+        if tf_tree is None: tf_tree = cls.static_tf_dict_from_bag(path, ros_distro=ros_distro)
 
         if child_frame not in tf_tree:
             assert False, f"child_frame {child_frame} not found in bag file {path}"
@@ -1008,18 +1019,21 @@ class PoseData(RobotData):
         return T
 
     @classmethod
-    def static_tf_dict_from_bag(cls, path: str):
+    def static_tf_dict_from_bag(cls, path: str, ros_distro=None):
         """Returns a dictionary of static transforms from a ROS bag file. The dictionary maps
         child_frame_id to a tuple of (parent_frame_id, transform_msg).
 
         Args:
             path (str): Path to ROS bag.
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
 
         Returns:
             dict: Static transform dictionary
         """
+        typestore = cls.distro_to_typestore(ros_distro)
         tf_tree = {}
-        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))]) as reader:
+        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))], default_typestore=typestore) as reader:
             connections = [x for x in reader.connections if x.topic == '/tf_static']
             if len(connections) == 0:
                 assert False, f"topic /tf_static not found in bag file {path}"
@@ -1034,19 +1048,22 @@ class PoseData(RobotData):
         return tf_tree
 
     @classmethod
-    def _tf_tree_from_bag(cls, path: str):
+    def _tf_tree_from_bag(cls, path: str, ros_distro=None):
         """
         Returns a dict where each key is a child frame id and the value is a tuple including the parent frame id and
         whether the tf is static or dynamic.
 
         Args:
             path (str): Path to ROS bag.
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
 
         Returns:
             dict: tf tree dictionary
         """
+        typestore = cls.distro_to_typestore(ros_distro)
         tf_tree = {}
-        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))]) as reader:
+        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))], default_typestore=typestore) as reader:
             for tf_type in ['tf', 'tf_static']:
                 connections = [x for x in reader.connections if x.topic == f"/{tf_type}"]
                 for (connection, timestamp, rawdata) in reader.messages(connections=connections):
@@ -1066,7 +1083,7 @@ class PoseData(RobotData):
         return tf_tree
 
     @classmethod
-    def _from_bag_single_tf_joint(cls, path: str, parent_frame: str, child_frame: str, **kwargs):
+    def _from_bag_single_tf_joint(cls, path: str, parent_frame: str, child_frame: str, ros_distro=None, **kwargs):
         """
         Extracts a dynamic transform from a ROS bag file in the form of a PoseData object.
         Transform is returned as T^parent_child, where T is a 4x4 rigid body transform and expresses
@@ -1076,15 +1093,18 @@ class PoseData(RobotData):
         Args:
             parent_frame (str): parent frame
             child_frame (str): child frame
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
 
         Returns:
             PoseData: PoseData object
         """
+        typestore = cls.distro_to_typestore(ros_distro)
         times = []
         positions = []
         orientations = []
 
-        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))]) as reader:
+        with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))], default_typestore=typestore) as reader:
             connections = [x for x in reader.connections if x.topic == '/tf']
             if len(connections) == 0:
                 assert False, f"topic /tf not found in bag file {path}"
