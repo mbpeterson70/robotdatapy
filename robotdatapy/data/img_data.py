@@ -101,7 +101,7 @@ class ImgData(RobotData):
     @classmethod
     def from_bag(cls, path, topic, camera_info_topic=None, time_range=None, time_range_relative=False,
                  time_tol=.1, causal=False, t0=None, compressed=True, color_space=None,
-                 compressed_rvl=False, stride=1, ignore_ros_time=False):
+                 compressed_rvl=False, stride=1, ignore_ros_time=False, ros_distro=None):
         """
         Creates ImgData object from bag file
 
@@ -121,6 +121,8 @@ class ImgData(RobotData):
             compressed (bool, optional): True if data_path contains compressed images
             stride (int, optional): Keep every nth frame. stride=1 keeps all frames, stride=3
                 keeps every 3rd frame. Useful for reducing memory usage. Defaults to 1.
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
         """
         if time_range is not None:
             assert time_range[0] < time_range[1], "time_range must be given in incrementing order"
@@ -137,9 +139,11 @@ class ImgData(RobotData):
             start_ns = None
             stop_ns = None
 
+        typestore = cls.distro_to_typestore(ros_distro)
+
         times = []
         img_msgs = []
-        with AnyReader([Path(path)]) as reader:
+        with AnyReader([Path(path)], default_typestore=typestore) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 raise MsgNotFound(topic, path)

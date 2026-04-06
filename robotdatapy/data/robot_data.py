@@ -194,6 +194,19 @@ class RobotData():
         return bag_start + relative_time
 
     @classmethod
+    def distro_to_typestore(cls, ros_distro):
+        if ros_distro is None:
+            return None
+        elif ros_distro == 'foxy':
+            return get_typestore(Stores.ROS2_FOXY)
+        elif ros_distro == 'humble':
+            return get_typestore(Stores.ROS2_HUMBLE)
+        elif ros_distro == 'jazzy':
+            return get_typestore(Stores.ROS2_JAZZY)
+        else:
+            raise ValueError("ros_distro must be one of ['foxy', 'humble', 'jazzy']")
+
+    @classmethod
     def _register_custom_msg_types(cls, custom_msg_types, custom_msg_paths, typestore):
         """
         Registers custom message types for ROS serialization.

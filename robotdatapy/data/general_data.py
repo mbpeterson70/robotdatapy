@@ -51,7 +51,8 @@ class GeneralData(RobotData):
             custom_msg_types(str/List(str), optional): A list of custom message types used in the 
                 bag file data. Example: ['bar_msgs/msg/Bar', 'foo_msgs/msg/Foo']. Defaults to None.
             custom_msg_paths(str/List(str), optional): A list of paths to custom message types used.
-            ros_distro (str, optional): ROS version. Choose from ['foxy']. Defaults to None.
+            ros_distro (str, optional): ROS2 distribution for typestore selection.
+                Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
 
         Returns:
             GeneralData: GeneralData object
@@ -59,16 +60,7 @@ class GeneralData(RobotData):
         assert topic is not None, "topic must be provided"
         assert (custom_msg_types is None) == (custom_msg_paths is None), "custom_msg_types and custom_msg_paths must be provided together"
         assert custom_msg_types is None or ros_distro is not None, "ros_distro must be provided if custom_msg_types is not None"
-        if ros_distro is None:
-            typestore = None
-        elif ros_distro == 'foxy':
-            typestore = get_typestore(Stores.ROS2_FOXY)
-        elif ros_distro == 'humble':
-            typestore = get_typestore(Stores.ROS2_HUMBLE)
-        elif ros_distro == 'jazzy':
-            typestore = get_typestore(Stores.ROS2_JAZZY)
-        else:
-            raise ValueError("ros_distro must be one of ['foxy', 'humble', 'jazzy']")
+        typestore = cls.distro_to_typestore(ros_distro)
         if custom_msg_types is not None:
             typestore = cls._register_custom_msg_types(custom_msg_types, custom_msg_paths, typestore)
         bag_file = os.path.expanduser(os.path.expandvars(path))
