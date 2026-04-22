@@ -1,5 +1,8 @@
+#!/usr/bin/env python                                     
+# PYTHON_ARGCOMPLETE_OK
 import matplotlib.pyplot as plt
 import argparse
+import argcomplete
 from dataclasses import dataclass
 
 from robotdatapy.data import PoseData
@@ -11,8 +14,8 @@ class PlotTrajectoryParams:
     trajectory_dt: float = 1.0
     pose_dt: float = 10.0
 
-if __name__ == "__main__":
-    
+def main():
+
     parser = argparse.ArgumentParser(description="Quick trajectory plotter tool.")
     parser.add_argument("-c", "--csv", type=str, 
                         help="Path to a CSV file containing the trajectory data.")
@@ -28,7 +31,8 @@ if __name__ == "__main__":
     
     parser.add_argument("--axes", type=str, default="xy", choices=["xy", "xz", "yz"],
                         help="Axes to plot (default: xy).")
-    
+
+    argcomplete.autocomplete(parser)
     args = parser.parse_args()
     params = PlotTrajectoryParams()
     
@@ -71,3 +75,7 @@ if __name__ == "__main__":
         plt.savefig(args.output)
     else:
         plt.show()
+
+
+if __name__ == "__main__":
+    main()

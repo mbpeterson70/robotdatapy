@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(
     name='robotdatapy',
-    version='1.1.10',
+    version='1.1.11',
     description='Python package for interfacing with robot data',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -23,7 +23,13 @@ setup(
                         'evo',
                         'opencv-python',
                         'utm',
-                        'gtsam'
+                        'gtsam',
+                        'argcomplete',
                       ],
+    entry_points={
+        'console_scripts': [
+            'rdp-plot-trajectory=robotdatapy.cli.plot_trajectory:main',
+        ],
+    },
 
 )

@@ -24,6 +24,19 @@ pip install .
 
 The best way to get familiar with `robotdatapy` is through the introductory tutorial, accessible [here](./examples/intro_tutorial.ipynb).
 
+## Command Line Interface
+
+`robotdatapy` offers a growing number of tools directly from the command line.
+For example, `rdp-plot-trajectory` enables easy trajectory plotting.
+
+To get these to work with tab complete, for bash run `activate-global-python-argcomplete --user`. If using zsh, add the following to your `~/.zshrc`:
+
+```
+autoload -Uz compinit && compinit
+autoload -Uz bashcompinit && bashcompinit                      
+eval "$(register-python-argcomplete rdp-plot-trajectory)"
+```
+
 ## Data Interfaces
 
 The primary use of this package is for interfacing with robot data. 
