@@ -5,6 +5,8 @@ from pathlib import Path
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import concurrent
+import rvl
+import struct
 
 from robotdatapy.data.robot_data import RobotData
 import cv2
@@ -241,22 +243,38 @@ class ImgData(RobotData):
         imgs = data['imgs']
         return cls(times=times, imgs=imgs, data_type='raw', **kwargs)
         
-    def to_mp4(self, path, fps=30):
+    def to_mp4(self, path, fps=30, colormap=None, norm_range=None):
         """
         Save image data to mp4 file
 
         Args:
             path (str): File path to save mp4 file
             fps (int, optional): frames per second. Defaults to 30.
+            colormap (int, optional): cv2 colormap constant (e.g. cv2.COLORMAP_JET).
+                If set, each frame is normalized to 8-bit and colormapped — required
+                for single-channel/depth streams. Defaults to None.
+            norm_range (tuple, optional): (min, max) bounds for colormap normalization,
+                in the source image's native units. If None, each frame is normalized
+                independently with cv2.NORM_MINMAX. Defaults to None.
         """
-        sample_img = self.img(self.t0)
+        def prep(img):
+            if colormap is not None:
+                if norm_range is not None:
+                    lo, hi = norm_range
+                    img8 = np.clip((img.astype(np.float32) - lo) * (255.0 / (hi - lo)),
+                                   0, 255).astype(np.uint8)
+                else:
+                    img8 = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+                return cv2.applyColorMap(img8, colormap)
+            if len(img.shape) > 2:
+                return img[:,:,:3]
+            return img
+
+        sample_img = prep(self.img(self.t0))
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(path, fourcc, fps, (sample_img.shape[1], sample_img.shape[0]))
         for t in self.times:
-            img = self.img(t)
-            if len(img.shape) > 2:
-                img = img[:,:,:3]
-            out.write(img)
+            out.write(prep(self.img(t)))
         out.release()
         return
 
@@ -387,11 +405,12 @@ class ImgData(RobotData):
             if not self.compressed:
                 img = message_to_cvimage(self.imgs[idx], color_space=self.color_space)
             elif self.compressed_rvl:
-                from rvl import decompress_rvl
                 assert self.width is not None and self.height is not None
-                img = decompress_rvl(
-                    np.array(self.imgs[idx].data[20:]).astype(np.int8), 
-                    self.height*self.width).reshape((self.height, self.width))
+                npix = self.width * self.height
+                payload = struct.pack('<I', npix) + bytes(self.imgs[idx].data[20:])
+                decompressed = rvl.decompress(payload)
+                img = np.frombuffer(decompressed, dtype=np.uint16).reshape(
+                    (self.height, self.width))
             else:
                 img = message_to_cvimage(self.imgs[idx], color_space=self.color_space)
                 
