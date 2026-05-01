@@ -25,11 +25,13 @@ setup(
                         'utm',
                         'gtsam',
                         'argcomplete',
+                        'rvl',
                       ],
     entry_points={
         'console_scripts': [
             'rdp-plot-trajectory=robotdatapy.cli.plot_trajectory:main',
             'rdp-path-length=robotdatapy.cli.path_length:main',
+            'rdp-img-data-to-mp4=robotdatapy.cli.img_data_to_mp4:main',
         ],
     },
 
