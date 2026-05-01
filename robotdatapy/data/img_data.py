@@ -2,9 +2,9 @@ import numpy as np
 import os
 from rosbags.highlevel import AnyReader
 from pathlib import Path
-from dataclasses import dataclass
+# from datetime import datetime
+import re
 import matplotlib.pyplot as plt
-import concurrent
 
 from robotdatapy.data.robot_data import RobotData
 import cv2
@@ -95,6 +95,8 @@ class ImgData(RobotData):
             return cls.from_zip(**{k: v for k, v in img_data_dict.items() if k != 'type'})
         elif img_data_dict['type'] == 'npz':
             return cls.from_npz(**{k: v for k, v in img_data_dict.items() if k != 'type'})
+        elif img_data_dict['type'] == 'dir' or img_data_dict['type'] == 'directory':
+            return cls.from_directory(**{k: v for k, v in img_data_dict.items() if k != 'type'})
         else:
             raise ValueError(f"Invalid img data type: {img_data_dict['type']}")
             
@@ -240,7 +242,53 @@ class ImgData(RobotData):
         times = data['times']
         imgs = data['imgs']
         return cls(times=times, imgs=imgs, data_type='raw', **kwargs)
+
+    @classmethod
+    def from_directory(cls, path, filename_format, key='timestamp', extension='.png', **kwargs):
+        """
+        Load image data from directory
+        TODO fix docstring
+
+        Args:
+            path (str): File path to directory containing all images
+            filename_format (str): strptime-style format string describing the
+                full filename (without extension). Literal characters are matched
+                exactly; strptime directives (e.g., ``%Y``, ``%H``) parse the
+                timestamp.
+
+                Examples::
+
+                    "%Y-%m-%dT%H:%M:%S"          # 2024-01-15T10:30:00.png
+                    "frame_%Y%m%d_%H%M%S"        # frame_20240115_103000.png
+                    "cam0_%Y-%m-%d-%H-%M-%S-%f"  # cam0_2024-01-15-10-30-00-123456.png
+            extension (str): Image file extension to load
         
+        Returns:
+            ImgData object
+        """
+        path = Path(path)
+        assert path.is_dir(), f"Image directory {path} does not exist!"
+
+        extension = extension if extension.startswith('.') else f".{extension}"
+        pattern = re.compile(filename_format)
+        times = []
+        imgs = []
+
+        # Assumes ordering from "sorted" is equivalent to time-based ordering
+        for image_path in sorted(path.glob(f"*{extension}")):
+            match = pattern.search(image_path.stem)
+            if match and key in match.groupdict():
+                times.append(float(match.group(key)))
+                imgs.append(str(image_path))
+            # try:
+            #     timestamp = datetime.strptime(image_path.stem, filename_format)
+            #     times.append(timestamp)
+            #     imgs.append(cv2.imread(image_path))
+            # except ValueError:
+            #     continue  # skip files that don't match expected format
+
+        return cls(times=times, imgs=imgs, data_type='dir', **kwargs)
+
     def to_mp4(self, path, fps=30):
         """
         Save image data to mp4 file
@@ -407,9 +455,17 @@ class ImgData(RobotData):
         
         elif self.data_type == 'raw':
             img = self.imgs[idx]
-            
+
+        elif self.data_type == 'dir':
+            if self.compressed:
+                # TODO this is hard-coded for TartanGround depth image compression
+                img = cv2.imread(self.imgs[idx], cv2.IMREAD_UNCHANGED)
+                img = img.view("<f4").squeeze(-1)  # read 4-channel uint8 as single float32 and drop channel dimension
+            else:
+                img = cv2.imread(self.imgs[idx])
+
         else:
-            raise ValueError("data_type not supported, please choose from: raw, bag, kitti")
+            raise ValueError("data_type not supported, please choose from: raw, dir, bag, kitti")
             
         return img
 
