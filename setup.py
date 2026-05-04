@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(
     name='robotdatapy',
-    version='1.1.12',
+    version='1.1.13',
     description='Python package for interfacing with robot data',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -25,11 +25,13 @@ setup(
                         'utm',
                         'gtsam',
                         'argcomplete',
+                        'rvl',
                       ],
     entry_points={
         'console_scripts': [
             'rdp-plot-trajectory=robotdatapy.cli.plot_trajectory:main',
             'rdp-path-length=robotdatapy.cli.path_length:main',
+            'rdp-img-data-to-mp4=robotdatapy.cli.img_data_to_mp4:main',
         ],
     },
 
