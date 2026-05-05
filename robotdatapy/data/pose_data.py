@@ -17,6 +17,7 @@ from scipy.spatial.transform import Rotation as Rot
 from scipy.spatial.transform import Slerp
 import pandas as pd
 import os
+from datetime import timezone
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -443,7 +444,7 @@ class PoseData(RobotData):
     def from_kitti_raw(cls, path, date=None, drive=None, kitti_sequence=None,
                        dataset_type='sync', frames=None,
                        interp=False, causal=False, time_tol=.1, t0=None,
-                       T_premultiply=None, T_postmultiply=None):
+                       T_premultiply=None, T_postmultiply=None, zero_times=False):
         """
         Create a PoseData object from a KITTI raw dataset with UTM poses.
 
@@ -467,6 +468,9 @@ class PoseData(RobotData):
             T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
                 Defaults to T_cam2_imu (IMU to left RGB camera frame).
+            zero_times (bool, optional): If True, subtract the first timestamp so times start
+                at 0. If False (default), preserve raw Unix timestamps (UTC) from the dataset for
+                easier syncing with externally-timestamped data. Defaults to False.
 
         Returns:
             PoseData: PoseData object
@@ -498,8 +502,13 @@ class PoseData(RobotData):
             for o in dataset.oxts
         ])
 
-        # Timestamps
-        times = np.array([(t - dataset.timestamps[0]).total_seconds() for t in dataset.timestamps])
+        # Timestamps. pykitti returns naive datetimes; KITTI was recorded in UTC, and
+        # downstream tools (e.g. kitti2mcap) interpret them as such. Force UTC so the
+        # resulting epoch seconds match those tools' bag stamps.
+        if zero_times:
+            times = np.array([(t - dataset.timestamps[0]).total_seconds() for t in dataset.timestamps])
+        else:
+            times = np.array([t.replace(tzinfo=timezone.utc).timestamp() for t in dataset.timestamps])
 
         # Default T_postmultiply: IMU to cam2 (left RGB), matching from_kitti convention
         if T_postmultiply is None:
