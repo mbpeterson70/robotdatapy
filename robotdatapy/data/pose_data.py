@@ -535,7 +535,7 @@ class PoseData(RobotData):
         orientations = data[:,4:]
         return cls(times, positions, orientations, **kwargs)
 
-    def position(self, t):
+    def position(self, t: float):
         """
         Position at time t.
 
@@ -550,7 +550,7 @@ class PoseData(RobotData):
         else:
             return self._untransformed_position(t)
 
-    def orientation(self, t):
+    def orientation(self, t: float):
         """
         Orientation at time t.
 
