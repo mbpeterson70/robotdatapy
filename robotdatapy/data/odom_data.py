@@ -20,9 +20,10 @@ from robotdatapy.data.vel_data import VelData
 
 class OdomData(RobotData):
 
-    def __init__(self, times: np.ndarray, positions: np.ndarray, orientations: np.ndarray, 
-            linear_velocities: np.ndarray, angular_velocities: np.ndarray, 
-            interp: bool = True, causal: bool = False, time_tol: float = 0.1) -> 'OdomData':
+    def __init__(self, times: np.ndarray, positions: np.ndarray, orientations: np.ndarray,
+            linear_velocities: np.ndarray, angular_velocities: np.ndarray,
+            interp: bool = True, causal: bool = False, time_tol: float = 0.1,
+            T_premultiply=None, T_postmultiply=None) -> 'OdomData':
         """
         OdomData constructor
 
@@ -35,6 +36,8 @@ class OdomData(RobotData):
             interp (bool, optional): interpolate between closest times, else, choose closest time. Defaults to True.
             causal (bool, optional): if true, returns nearest velocity *before* desired time. Defaults to False.
             time_tol (float, optional): allowable time difference between desired time and returned data. Defaults to 0.1.
+            T_premultiply (np.array, shape(4,4)): Rigid transform to premultiply to the pose.
+            T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
 
         Returns:
             OdomData: OdomData object
@@ -47,7 +50,9 @@ class OdomData(RobotData):
             orientations=orientations,
             interp=interp,
             causal=causal,
-            time_tol=time_tol
+            time_tol=time_tol,
+            T_premultiply=T_premultiply,
+            T_postmultiply=T_postmultiply
         )
 
         self.vel_data = VelData.from_numpy(
@@ -56,7 +61,9 @@ class OdomData(RobotData):
             angular_velocities=angular_velocities,
             interp=interp,
             causal=causal,
-            time_tol=time_tol
+            time_tol=time_tol,
+            R_premultiply=T_premultiply[:3,:3] if T_premultiply is not None else None,
+            R_postmultiply=T_postmultiply[:3,:3] if T_postmultiply is not None else None
         )
 
     @classmethod
@@ -100,6 +107,16 @@ class OdomData(RobotData):
             angular_velocities=array[:,11:14],
             **kwargs
         )
+
+    def set_T_premultiply(self, T_premultiply: np.ndarray):
+        self.pose_data.T_premultiply = T_premultiply
+        self.vel_data.R_premultiply = T_premultiply[:3,:3] if T_premultiply is not None else None
+        return
+
+    def set_T_postmultiply(self, T_postmultiply: np.ndarray):
+        self.pose_data.T_postmultiply = T_postmultiply
+        self.vel_data.R_postmultiply = T_postmultiply[:3,:3] if T_postmultiply is not None else None
+        return
     
     def lin_vel(self, t: float) -> np.ndarray:
         """
