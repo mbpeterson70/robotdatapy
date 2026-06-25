@@ -575,17 +575,7 @@ class PoseData(RobotData):
         Returns:
             np.array, shape(3,): position in xyz
         """
-        idx = self.idx(t)
-        if self.interp:
-            if idx[0] == idx[1] or self.times[idx[0]] == self.times[idx[1]]:
-                position = self.positions[idx[0]]
-            else:
-                position = self.positions[idx[0]] + \
-                    (self.positions[idx[1]] - self.positions[idx[0]]) * \
-                    (t - self.times[idx[0]]) / (self.times[idx[1]] - self.times[idx[0]])
-        else:
-            position = self.positions[idx]
-        return position
+        return self.get_val(self.positions, t, interp=self.interp)
 
     def _untransformed_orientation(self, t):
         """

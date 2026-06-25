@@ -86,8 +86,18 @@ class RobotData():
         else:
             return idx
 
-    def get_val(self, vals, t, **kwargs):
+    def get_val(self, vals, t, interp=False, **kwargs):
         idx = self.idx(t, **kwargs)
+        if interp:
+            assert self.interp, "self.interp should be True if interp is used"
+            if idx[0] == idx[1] or self.times[idx[0]] == self.times[idx[1]]:
+                return vals[idx[0]]
+            return (
+                vals[idx[0]] + 
+                (vals[idx[1]] - vals[idx[0]]) * 
+                (t - self.times[idx[0]]) / 
+                (self.times[idx[1]] - self.times[idx[0]])
+            )
         return vals[idx]
 
     def nearest_time(self, t, force_double=False) -> float:
