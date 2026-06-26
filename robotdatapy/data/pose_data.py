@@ -535,7 +535,7 @@ class PoseData(RobotData):
         orientations = data[:,4:]
         return cls(times, positions, orientations, **kwargs)
 
-    def position(self, t):
+    def position(self, t: float):
         """
         Position at time t.
 
@@ -550,7 +550,7 @@ class PoseData(RobotData):
         else:
             return self._untransformed_position(t)
 
-    def orientation(self, t):
+    def orientation(self, t: float):
         """
         Orientation at time t.
 
@@ -575,17 +575,7 @@ class PoseData(RobotData):
         Returns:
             np.array, shape(3,): position in xyz
         """
-        idx = self.idx(t)
-        if self.interp:
-            if idx[0] == idx[1] or self.times[idx[0]] == self.times[idx[1]]:
-                position = self.positions[idx[0]]
-            else:
-                position = self.positions[idx[0]] + \
-                    (self.positions[idx[1]] - self.positions[idx[0]]) * \
-                    (t - self.times[idx[0]]) / (self.times[idx[1]] - self.times[idx[0]])
-        else:
-            position = self.positions[idx]
-        return position
+        return self.get_val(self.positions, t, interp=self.interp)
 
     def _untransformed_orientation(self, t):
         """
