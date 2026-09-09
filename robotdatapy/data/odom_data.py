@@ -10,9 +10,8 @@
 #
 ###########################################################
 
-# TODO: implement T_premultiply and T_postmultiply
-
 import numpy as np
+from scipy.spatial.transform import Rotation as Rot
 
 from robotdatapy.data.robot_data import RobotData
 from robotdatapy.data.pose_data import PoseData
@@ -107,6 +106,66 @@ class OdomData(RobotData):
             angular_velocities=array[:,11:14],
             **kwargs
         )
+
+    @classmethod
+    def from_pose_data(cls, pose_data: PoseData, interp: bool = True, causal: bool = False,
+            time_tol: float = 0.1) -> 'OdomData':
+        """
+        Builds an OdomData from a PoseData by finite-differencing the pose stream.
+
+        Velocities are estimated at each original pose timestamp, so all N samples
+        are kept and remain co-located with the poses:
+            - linear: central difference of position, one-sided at the endpoints,
+              v[k] = (p[k+1] - p[k-1]) / (t[k+1] - t[k-1]).
+            - angular: world frame, from the relative rotation over the same
+              interval, dR = R[k+1] * R[k-1]^-1, omega[k] = rotvec(dR) / dt.
+
+        Any T_premultiply / T_postmultiply already set on ``pose_data`` is baked
+        into the differenced world poses (obtained via ``all_poses``); the returned
+        OdomData carries no additional transform.
+
+        Non-advancing timestamps (dt <= 0, e.g. duplicate samples) forward-carry
+        the last finite linear velocity rather than dividing by zero, and a final
+        nan_to_num guarantees finite output regardless of the input timing.
+
+        Args:
+            pose_data (PoseData): source poses.
+            interp (bool, optional): passed to the OdomData constructor. Defaults to True.
+            causal (bool, optional): passed to the OdomData constructor. Defaults to False.
+            time_tol (float, optional): passed to the OdomData constructor. Defaults to 0.1.
+
+        Returns:
+            OdomData: odometry with finite-differenced linear and angular velocities.
+        """
+        poses = pose_data.all_poses()  # (n,4,4) with any transforms applied
+        times = np.asarray(pose_data.times, dtype=float)
+        positions = poses[:, :3, 3]
+        rotations = Rot.from_matrix(poses[:, :3, :3])
+        orientations = rotations.as_quat()  # xyzw
+
+        n = len(times)
+        linear_velocities = np.zeros((n, 3))
+        angular_velocities = np.zeros((n, 3))
+        last_lin = np.zeros(3)
+        for k in range(n):
+            kp = min(k + 1, n - 1)
+            km = max(k - 1, 0)
+            dt = times[kp] - times[km]
+            if dt <= 0:
+                # duplicate / non-advancing timestamp: forward-carry last finite
+                # velocity instead of dividing by zero.
+                linear_velocities[k] = last_lin
+                continue
+            linear_velocities[k] = (positions[kp] - positions[km]) / dt
+            last_lin = linear_velocities[k]
+            dR = rotations[kp] * rotations[km].inv()  # relative rotation (world frame)
+            angular_velocities[k] = dR.as_rotvec() / dt
+        linear_velocities = np.nan_to_num(linear_velocities, nan=0.0, posinf=0.0, neginf=0.0)
+        angular_velocities = np.nan_to_num(angular_velocities, nan=0.0, posinf=0.0, neginf=0.0)
+
+        return cls(times=times, positions=positions, orientations=orientations,
+            linear_velocities=linear_velocities, angular_velocities=angular_velocities,
+            interp=interp, causal=causal, time_tol=time_tol)
 
     def set_T_premultiply(self, T_premultiply: np.ndarray):
         self.pose_data.T_premultiply = T_premultiply
