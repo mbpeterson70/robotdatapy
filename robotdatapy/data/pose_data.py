@@ -403,8 +403,9 @@ class PoseData(RobotData):
         Returns:
             PoseData: PoseData object
         """
-        positions = np.array([pose[:3,3] for pose in poses])
-        orientations = np.array([Rot.as_quat(Rot.from_matrix(pose[:3,:3])) for pose in poses])
+        poses = np.asarray(poses).reshape(-1, 4, 4)
+        positions = poses[:, :3, 3]
+        orientations = Rot.from_matrix(poses[:, :3, :3]).as_quat()
         return cls(times, positions, orientations, **kwargs)
 
     @classmethod
