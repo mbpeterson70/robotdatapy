@@ -29,6 +29,7 @@ import csv
 import yaml
 from typing import List
 
+from robotdatapy.bag_reader import iter_raw_messages
 from robotdatapy.data.robot_data import RobotData
 
 DEFAULT_GT_OPTIONS = {
@@ -281,8 +282,8 @@ class PoseData(RobotData):
 
             last_path_msg = None
             t0 = None
-            for (connection, timestamp, rawdata) in reader.messages(
-                connections=connections, start=start_ns, stop=stop_ns
+            for (connection, timestamp, rawdata) in iter_raw_messages(
+                reader, connections, start=start_ns, stop=stop_ns
             ):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 t_msg = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
@@ -1037,7 +1038,7 @@ class PoseData(RobotData):
             connections = [x for x in reader.connections if x.topic == '/tf_static']
             if len(connections) == 0:
                 assert False, f"topic /tf_static not found in bag file {path}"
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
                     for transform_msg in msg.transforms:
@@ -1066,7 +1067,7 @@ class PoseData(RobotData):
         with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))], default_typestore=typestore) as reader:
             for tf_type in ['tf', 'tf_static']:
                 connections = [x for x in reader.connections if x.topic == f"/{tf_type}"]
-                for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+                for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                     msg = reader.deserialize(rawdata, connection.msgtype)
                     if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
                         for transform_msg in msg.transforms:
@@ -1108,7 +1109,7 @@ class PoseData(RobotData):
             connections = [x for x in reader.connections if x.topic == '/tf']
             if len(connections) == 0:
                 assert False, f"topic /tf not found in bag file {path}"
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
                     for transform_msg in msg.transforms:
