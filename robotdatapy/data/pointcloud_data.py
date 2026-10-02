@@ -49,6 +49,7 @@ from rosbags.highlevel import AnyReader
 from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from pathlib import Path
 
+from robotdatapy.bag_reader import iter_raw_messages
 from robotdatapy.data.robot_data import RobotData
 
 _DATATYPES = {
@@ -329,8 +330,8 @@ class PointCloudData(RobotData):
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {path}"
 
-            for (connection, timestamp, rawdata) in reader.messages(
-                connections=connections, start=start_ns, stop=stop_ns
+            for (connection, timestamp, rawdata) in iter_raw_messages(
+                reader, connections, start=start_ns, stop=stop_ns
             ):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if connection.topic != topic:
@@ -376,7 +377,7 @@ class PointCloudData(RobotData):
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {path}"
                 
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if connection.topic != topic:
                     continue

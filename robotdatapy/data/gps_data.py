@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 import utm
 
+from robotdatapy.bag_reader import iter_raw_messages
 from robotdatapy.data.robot_data import RobotData
 from robotdatapy.ros_msg_convert import stamp_2_float
 
@@ -108,7 +109,7 @@ class GPSData(RobotData):
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {path}"
 
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if type(msg).__name__ == 'sensor_msgs__msg__NavSatFix':
                     latitude = msg.latitude

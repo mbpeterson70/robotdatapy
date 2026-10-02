@@ -29,17 +29,20 @@ import csv
 import yaml
 from typing import List
 
+from robotdatapy.bag_reader import iter_raw_messages
 from robotdatapy.data.robot_data import RobotData
 
 DEFAULT_GT_OPTIONS = {
     'cols': {
         'time': ["#timestamp_kf"],
         'position': ['x', 'y', 'z'],
-        'orientation': ["qx", "qy", "qz", "qw"],
+        # Header names in file order (columns 4-7 are qw, qx, qy, qz)
+        'orientation': ["qw", "qx", "qy", "qz"],
     },
     'col_nums': {
         'time': [0],
         'position': [1, 2, 3],
+        # Column indices read as (qx, qy, qz, qw)
         'orientation': [5, 6, 7, 4]
     },
     'timescale': 1e-9
@@ -281,8 +284,8 @@ class PoseData(RobotData):
 
             last_path_msg = None
             t0 = None
-            for (connection, timestamp, rawdata) in reader.messages(
-                connections=connections, start=start_ns, stop=stop_ns
+            for (connection, timestamp, rawdata) in iter_raw_messages(
+                reader, connections, start=start_ns, stop=stop_ns
             ):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 t_msg = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
@@ -403,8 +406,9 @@ class PoseData(RobotData):
         Returns:
             PoseData: PoseData object
         """
-        positions = np.array([pose[:3,3] for pose in poses])
-        orientations = np.array([Rot.as_quat(Rot.from_matrix(pose[:3,:3])) for pose in poses])
+        poses = np.asarray(poses).reshape(-1, 4, 4)
+        positions = poses[:, :3, 3]
+        orientations = Rot.from_matrix(poses[:, :3, :3]).as_quat()
         return cls(times, positions, orientations, **kwargs)
 
     @classmethod
@@ -1036,7 +1040,7 @@ class PoseData(RobotData):
             connections = [x for x in reader.connections if x.topic == '/tf_static']
             if len(connections) == 0:
                 assert False, f"topic /tf_static not found in bag file {path}"
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
                     for transform_msg in msg.transforms:
@@ -1065,7 +1069,7 @@ class PoseData(RobotData):
         with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))], default_typestore=typestore) as reader:
             for tf_type in ['tf', 'tf_static']:
                 connections = [x for x in reader.connections if x.topic == f"/{tf_type}"]
-                for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+                for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                     msg = reader.deserialize(rawdata, connection.msgtype)
                     if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
                         for transform_msg in msg.transforms:
@@ -1107,7 +1111,7 @@ class PoseData(RobotData):
             connections = [x for x in reader.connections if x.topic == '/tf']
             if len(connections) == 0:
                 assert False, f"topic /tf not found in bag file {path}"
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
                     for transform_msg in msg.transforms:

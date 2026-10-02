@@ -8,6 +8,7 @@ import concurrent
 import rvl
 import struct
 
+from robotdatapy.bag_reader import iter_raw_messages
 from robotdatapy.data.robot_data import RobotData
 import cv2
 import pykitti
@@ -149,8 +150,8 @@ class ImgData(RobotData):
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 raise MsgNotFound(topic, path)
-            for frame_idx, (connection, timestamp, rawdata) in enumerate(reader.messages(
-                connections=connections, start=start_ns, stop=stop_ns
+            for frame_idx, (connection, timestamp, rawdata) in enumerate(iter_raw_messages(
+                reader, connections, start=start_ns, stop=stop_ns
             )):
                 if connection.topic != topic:
                     continue

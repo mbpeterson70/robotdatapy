@@ -5,6 +5,7 @@ from pathlib import Path
 from copy import deepcopy
 import os
 
+from robotdatapy.bag_reader import iter_raw_messages
 from robotdatapy.data.robot_data import RobotData
     
 class GeneralData(RobotData):
@@ -71,7 +72,7 @@ class GeneralData(RobotData):
             sub_attrs = field.strip().split('/')
         with AnyReader([Path(bag_file)], default_typestore=typestore) as reader:
             connections = [x for x in reader.connections if x.topic == topic]
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 header = getattr(msg, 'header', None)
                 if header is None:

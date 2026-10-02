@@ -5,6 +5,7 @@ from rosbags.typesys import Stores, get_typestore
 from pathlib import Path
 
 import cv2
+from robotdatapy.bag_reader import iter_raw_messages
 from robotdatapy.exceptions import MsgNotFound
 
 def pixel_depth_2_xyz(x, y, depth, K):
@@ -81,7 +82,7 @@ class CameraParams:
             connections = [x for x in reader.connections if x.topic == topic]
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {file}"
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                 if connection.topic == topic:
                     msg = reader.deserialize(rawdata, connection.msgtype)
                     return cls.from_msg(msg)
