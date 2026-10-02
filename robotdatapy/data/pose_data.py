@@ -36,11 +36,13 @@ DEFAULT_GT_OPTIONS = {
     'cols': {
         'time': ["#timestamp_kf"],
         'position': ['x', 'y', 'z'],
-        'orientation': ["qx", "qy", "qz", "qw"],
+        # Header names in file order (columns 4-7 are qw, qx, qy, qz)
+        'orientation': ["qw", "qx", "qy", "qz"],
     },
     'col_nums': {
         'time': [0],
         'position': [1, 2, 3],
+        # Column indices read as (qx, qy, qz, qw)
         'orientation': [5, 6, 7, 4]
     },
     'timescale': 1e-9

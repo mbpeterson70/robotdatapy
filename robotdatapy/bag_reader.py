@@ -54,6 +54,7 @@ _MCAP_CHUNK_HEADER_FIXED_LEN = 9 + 40
 # them in parallel. Threads release the GIL in os.pread.
 _READ_WORKERS = 16
 _READ_AHEAD = 256
+_INDEX_READ_AHEAD = 64  # chunks whose MessageIndex reads are in flight
 # First read per message record; larger records get a second read for the rest.
 _FIRST_READ_BYTES = 4096
 
@@ -137,37 +138,42 @@ def _reader_messages(owner, connections, start, stop):
 
 def _storage_messages(storage, connections, start, stop):
     """Messages from one storage file, via MCAP message indexes when possible."""
-    if isinstance(storage, McapReader):
+    plan = _mcap_fast_plan(storage, connections, start, stop)
+    if plan is not None:
         fd = os.open(storage.path, os.O_RDONLY)
+        pool = ThreadPoolExecutor(_READ_WORKERS)
+        records = _read_mcap_entries(
+            storage, _iter_mcap_index_entries(*plan, start, stop, fd, pool), fd, pool
+        )
         try:
-            with ThreadPoolExecutor(_READ_WORKERS) as pool:
-                try:
-                    entries = _mcap_index_entries(
-                        storage, connections, start, stop, fd, pool
-                    )
-                except Exception as e:
-                    _warn_once(
-                        ("index", str(storage.path)),
-                        f"Could not use MCAP message indexes for {storage.path} "
-                        f"({e!r}); falling back to standard (slower) reading.",
-                    )
-                    entries = None
-                if entries is not None:
-                    yield from _read_mcap_entries(storage, entries, fd, pool)
-                    return
+            try:
+                first = next(records, None)
+            except Exception as e:
+                # Nothing yielded yet, so falling back is still exact.
+                _warn_once(
+                    ("index", str(storage.path)),
+                    f"Could not use MCAP message indexes for {storage.path} "
+                    f"({e!r}); falling back to standard (slower) reading.",
+                )
+            else:
+                if first is not None:
+                    yield first
+                    yield from records
+                return
         finally:
+            records.close()
+            pool.shutdown(wait=True, cancel_futures=True)
             os.close(fd)
     yield from storage.messages(connections, start, stop)
 
 
-def _mcap_index_entries(storage: McapReader, connections, start, stop, fd, pool):
+def _mcap_fast_plan(storage, connections, start, stop):
     """
-    Collect (log_time, order_offset, file_offset, channel_id, connection) for every
-    requested message, sorted in the same order McapReader.messages yields them.
-    Returns None if this file cannot use the fast path.
+    (chunks, channel_map) to read via message indexes, or None if this storage
+    can't use the fast path. Uses only already-parsed summary metadata.
     """
-    if not storage.chunks:
-        return None  # unchunked file; McapReader scans it linearly
+    if not isinstance(storage, McapReader) or not storage.chunks:
+        return None  # not MCAP, or unchunked file (McapReader scans it linearly)
 
     # Same channel matching as McapReader.messages
     channel_map = {
@@ -203,31 +209,35 @@ def _mcap_index_entries(storage: McapReader, connections, start, stop, fd, pool)
         for chunk in chunks
     ):
         return None
+    return sorted(chunks, key=lambda x: x.message_start_time), channel_map
+
+
+def _iter_mcap_index_entries(chunks, channel_map, start, stop, fd, pool):
+    """
+    Lazily yield (log_time, order_offset, file_offset, channel_id, connection) for
+    every requested message, in the same order McapReader.messages yields them:
+    by (log_time, chunk_start_offset + offset within chunk).
+
+    Chunks (sorted by message_start_time) have their MessageIndex records read a
+    bounded distance ahead. An entry is only yielded once every chunk that could
+    hold an earlier message (message_start_time <= its log_time) has been merged
+    in, so early-exiting callers only touch the start of the file.
+    """
 
     # One MessageIndex record per (chunk, channel): opcode (1) + record length (8)
     # + channel_id (2) + entries byte length (4) + (log_time, offset) u64 pairs
-    jobs = [
-        (chunk, cid, conn)
-        for chunk in chunks
-        for cid, conn in channel_map.items()
-        if chunk.channel_count.get(cid, 0)
-    ]
-
-    def read_index(job):
-        chunk, cid, _ = job
+    def read_index(chunk, cid):
         size = 15 + 16 * chunk.channel_count[cid]
         return os.pread(fd, size, chunk.message_index_offsets[cid])
 
-    entries = []
-    for (chunk, cid, conn), record in zip(jobs, pool.map(read_index, jobs)):
-        op, _, channel_id, entries_len = struct.unpack_from("<BQHI", record, 0)
-        if op != _MCAP_OP_MESSAGE_INDEX or channel_id != cid:
-            raise ValueError(
-                f"unexpected MessageIndex record (opcode {op:#x}, channel {channel_id})"
-            )
-        if 15 + entries_len != len(record):
-            raise ValueError("MessageIndex length does not match channel count")
-        index = np.frombuffer(record, dtype="<u8", offset=15).reshape(-1, 2)
+    def submit(chunk):
+        return chunk, [
+            (cid, conn, pool.submit(read_index, chunk, cid))
+            for cid, conn in channel_map.items()
+            if chunk.channel_count.get(cid, 0)
+        ]
+
+    def merge_chunk(chunk, reads, heap):
         lo = start or chunk.message_start_time
         hi = stop or chunk.message_end_time + 1
         records_start = (
@@ -235,20 +245,43 @@ def _mcap_index_entries(storage: McapReader, connections, start, stop, fd, pool)
             + _MCAP_CHUNK_HEADER_FIXED_LEN
             + len(chunk.compression)
         )
-        for log_time, offset in index.tolist():
-            if lo <= log_time < hi:
-                # McapReader orders by (log_time, chunk_start_offset + offset)
-                entries.append(
-                    (
-                        log_time,
-                        chunk.chunk_start_offset + offset,
-                        records_start + offset,
-                        cid,
-                        conn,
-                    )
+        for cid, conn, future in reads:
+            record = future.result()
+            op, _, channel_id, entries_len = struct.unpack_from("<BQHI", record, 0)
+            if op != _MCAP_OP_MESSAGE_INDEX or channel_id != cid:
+                raise ValueError(
+                    f"unexpected MessageIndex record (opcode {op:#x}, "
+                    f"channel {channel_id})"
                 )
-    entries.sort(key=lambda x: (x[0], x[1]))
-    return entries
+            if 15 + entries_len != len(record):
+                raise ValueError("MessageIndex length does not match channel count")
+            index = np.frombuffer(record, dtype="<u8", offset=15).reshape(-1, 2)
+            for log_time, offset in index.tolist():
+                if lo <= log_time < hi:
+                    heapq.heappush(
+                        heap,
+                        (
+                            log_time,
+                            chunk.chunk_start_offset + offset,
+                            records_start + offset,
+                            cid,
+                            conn,
+                        ),
+                    )
+
+    pending = deque()  # chunks with index reads in flight, in start-time order
+    chunk_iter = iter(chunks)
+    for chunk in itertools.islice(chunk_iter, _INDEX_READ_AHEAD):
+        pending.append(submit(chunk))
+
+    heap = []
+    while heap or pending:
+        while pending and (not heap or pending[0][0].message_start_time <= heap[0][0]):
+            merge_chunk(*pending.popleft(), heap)
+            for chunk in itertools.islice(chunk_iter, 1):
+                pending.append(submit(chunk))
+        if heap:
+            yield heapq.heappop(heap)
 
 
 def _read_mcap_entries(storage: McapReader, entries, fd, pool):
@@ -277,7 +310,6 @@ def _read_mcap_entries(storage: McapReader, entries, fd, pool):
         return data[9 + 22 : 9 + length]
 
     in_flight = deque()
-    entries = iter(entries)
     for entry in itertools.islice(entries, _READ_AHEAD):
         in_flight.append((entry, pool.submit(read_record, entry)))
     while in_flight:

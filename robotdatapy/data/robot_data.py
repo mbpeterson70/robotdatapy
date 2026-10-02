@@ -5,6 +5,7 @@ from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from pathlib import Path
 from typing import List, Union
 
+from robotdatapy.bag_reader import iter_raw_messages
 from robotdatapy.exceptions import NoDataNearTimeException
 
 def maybe_reverse_iterator(itr, flag):
@@ -135,7 +136,7 @@ class RobotData():
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {bag}"
 
-            for (connection, timestamp, rawdata) in maybe_reverse_iterator(reader.messages(connections=connections), reverse):
+            for (connection, timestamp, rawdata) in maybe_reverse_iterator(iter_raw_messages(reader, connections), reverse):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 try:
                     t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
@@ -158,7 +159,7 @@ class RobotData():
             if len(connections) == 0:
                 assert False, f"topic {topic} not found in bag file {bag}"
 
-            for (connection, timestamp, rawdata) in reader.messages(connections=connections):
+            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 try:
                     t = msg.header.stamp.sec + msg.header.stamp.nanosec*1e-9
