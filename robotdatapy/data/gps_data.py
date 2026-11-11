@@ -19,6 +19,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 import utm
+from typing import Tuple
 
 from robotdatapy.bag_reader import iter_raw_messages
 from robotdatapy.data.robot_data import RobotData
@@ -46,7 +47,17 @@ def _distance_3d_m(p1, p2, use_altitude=True):
     return float(d_horiz)
 
 class GPSData(RobotData):
-    def __init__(self, times, lat_lon_alts, covariances=None, interp=True, causal=False, time_tol=1.0, t0=None): 
+    def __init__(
+        self,
+        times,
+        lat_lon_alts,
+        covariances=None,
+        interp=True,
+        causal=False,
+        time_tol=1.0,
+        t0=None,
+        time_range: Tuple[float, float] = None
+    ):
         """
         Class for easy access to object poses over time
 
@@ -64,6 +75,20 @@ class GPSData(RobotData):
                 the data_file. Defaults to None.
         """
         super().__init__(time_tol=time_tol, interp=interp, causal=causal)
+        
+        if time_range is not None:
+            if time_range[0] is not None:
+                start_idx = np.where(np.array(times) >= time_range[0])[0][0]
+            else:
+                start_idx = 0
+            if time_range[1] is not None:
+                end_idx = np.where(np.array(times) <= time_range[1])[0][-1]
+            else:
+                end_idx = len(times) - 1
+            times = times[start_idx:end_idx+1]
+            lat_lon_alts = lat_lon_alts[start_idx:end_idx+1]
+            covariances = covariances[start_idx:end_idx+1] if covariances is not None else None
+        
         self.set_times(np.array(times))
         self.lat_lon_alts = np.array(lat_lon_alts)
         self.covariances = np.array(covariances)
@@ -79,6 +104,7 @@ class GPSData(RobotData):
         causal: bool = False, 
         time_tol: float = 1.0,
         t0: float = None,
+        time_range: Tuple[float, float] = None,
         ros_distro: str = None,
     ):
         """
@@ -121,7 +147,8 @@ class GPSData(RobotData):
                 lat_lon_alts.append([latitude, longitude, altitude])
                 covariances.append(np.array(msg.position_covariance).reshape((3,3)))
 
-        return cls(times, lat_lon_alts, covariances=covariances, interp=interp, causal=causal, time_tol=time_tol, t0=t0)
+        return cls(times, lat_lon_alts, covariances=covariances, interp=interp, 
+                   causal=causal, time_tol=time_tol, t0=t0, time_range=time_range)
 
     def latitude(self, t):
         lat, lon, alt = self.lat_lon_alt(t)
