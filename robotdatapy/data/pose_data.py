@@ -27,7 +27,7 @@ import cv2
 import evo
 import csv
 import yaml
-from typing import List
+from typing import List, Tuple
 
 from robotdatapy.bag_reader import iter_raw_messages
 from robotdatapy.data.robot_data import RobotData
@@ -68,7 +68,19 @@ class PoseData(RobotData):
     Class for easy access to object poses over time
     """
 
-    def __init__(self, times, positions, orientations, interp=True, causal=False, time_tol=.1, t0=None, T_premultiply=None, T_postmultiply=None):
+    def __init__(
+        self,
+        times,
+        positions,
+        orientations,
+        interp=True,
+        causal=False,
+        time_tol=.1,
+        t0=None,
+        T_premultiply=None,
+        T_postmultiply=None,
+        time_range: Tuple[float, float] = None
+    ):
         """
         Class for easy access to object poses over time
 
@@ -85,6 +97,20 @@ class PoseData(RobotData):
             T_postmultiply (np.array, shape(4,4)): Rigid transform to postmultiply to the pose.
         """
         super().__init__(time_tol=time_tol, interp=interp, causal=causal)
+        
+        if time_range is not None:
+            if time_range[0] is not None:
+                start_idx = np.where(np.array(times) >= time_range[0])[0][0]
+            else:
+                start_idx = 0
+            if time_range[1] is not None:
+                end_idx = np.where(np.array(times) <= time_range[1])[0][-1]
+            else:
+                end_idx = len(times) - 1
+            times = times[start_idx:end_idx+1]
+            positions = positions[start_idx:end_idx+1]
+            orientations = orientations[start_idx:end_idx+1]
+        
         self.set_times(np.array(times))
         self.positions = np.array(positions)
         self.orientations = np.array(orientations)
@@ -360,13 +386,17 @@ class PoseData(RobotData):
         frame_chain = frame_chain[::-1]
         tf_types = tf_types[::-1]
 
+        # T_premultiply / T_postmultiply apply to the composed chain only (in
+        # from_times_and_poses below), not to each dynamic joint
+        joint_kwargs = {k: v for k, v in kwargs.items()
+                        if k not in ('T_premultiply', 'T_postmultiply')}
         for joint_i in range(len(tf_types)):
             if tf_types[joint_i] == 'tf_static':
                 T_parent_child.append(cls.static_tf_from_bag(path,
                     frame_chain[joint_i], frame_chain[joint_i+1], ros_distro=ros_distro))
             elif tf_types[joint_i] == 'tf':
                 T_parent_child.append(cls._from_bag_single_tf_joint(path,
-                    frame_chain[joint_i], frame_chain[joint_i+1], ros_distro=ros_distro, **kwargs))
+                    frame_chain[joint_i], frame_chain[joint_i+1], ros_distro=ros_distro, **joint_kwargs))
             else:
                 assert False, "invalid tf type"
 

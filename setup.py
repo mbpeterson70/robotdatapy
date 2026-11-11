@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(
     name='robotdatapy',
-    version='1.1.17',
+    version='1.1.18',
     description='Python package for interfacing with robot data',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -17,7 +17,7 @@ setup(
     install_requires=['numpy',
                         'scipy',
                         'pandas',
-                        'rosbags',
+                        'rosbags>=0.11',
                         'rosbags-image',
                         'pykitti',
                         'evo',

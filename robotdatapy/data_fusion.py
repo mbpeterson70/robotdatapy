@@ -133,7 +133,7 @@ def fuse_gps_and_local_pose_estimates(
     init_guess_poses = []
     for t in time_idx_data.times:
         sample_t0 = np.max([t - rot_init_time_window/2, local_pose_estimate.t0, gps_data.t0])
-        sample_tf = np.min([t + sample_t0, local_pose_estimate.tf, gps_data.tf])
+        sample_tf = np.min([t + rot_init_time_window/2, local_pose_estimate.tf, gps_data.tf])
         sample_times = np.linspace(sample_t0, sample_tf, rot_init_num_samples)
         gps_points = [np.concatenate([gps_data.utm(st)[:2], [gps_data.altitude(st)]]) 
                         for st in sample_times]
