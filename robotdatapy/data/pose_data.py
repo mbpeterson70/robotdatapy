@@ -49,6 +49,26 @@ DEFAULT_GT_OPTIONS = {
 }
 KIMERA_MULTI_GT_CSV_OPTIONS = DEFAULT_GT_OPTIONS
 
+
+# margin (seconds) around a time range when reading dynamic tf messages
+TF_TIME_RANGE_MARGIN_S = 1.0
+
+
+def tf_topics(tf_topic_namespace: str = None) -> Tuple[str, str]:
+    """
+    The (tf, tf_static) topics: /tf and /tf_static, or /<namespace>/tf and
+    /<namespace>/tf_static (e.g., for a robot-namespaced TF tree).
+
+    Args:
+        tf_topic_namespace (str, optional): namespace of the TF topics. Defaults to None.
+
+    Returns:
+        Tuple[str, str]: tf topic, tf_static topic
+    """
+    prefix = f"/{tf_topic_namespace.strip('/')}" if tf_topic_namespace else ""
+    return f"{prefix}/tf", f"{prefix}/tf_static"
+
+
 KITTI_ODOM_TO_RAW = {
     '00': ('2011_10_03', '0027', 0, 4540),
     '01': ('2011_10_03', '0042', 0, 1100),
@@ -347,7 +367,10 @@ class PoseData(RobotData):
                    t0=t0, T_premultiply=T_premultiply, T_postmultiply=T_postmultiply)
 
     @classmethod
-    def from_bag_tf(cls, path: str, parent_frame: str, child_frame: str, time_range=None, time_range_relative=False, ros_distro=None, **kwargs):
+    def from_bag_tf(
+        cls, path: str, parent_frame: str, child_frame: str, time_range=None,
+        time_range_relative=False, ros_distro=None, tf_topic_namespace=None, **kwargs
+    ):
         """
         Create a PoseData object from a ROS bag file using tf (/tf, /tf_static topic) messages.
 
@@ -362,6 +385,8 @@ class PoseData(RobotData):
                 to the bag start time. Defaults to False.
             ros_distro (str, optional): ROS2 distribution for typestore selection.
                 Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
+            tf_topic_namespace (str, optional): Read /<tf_topic_namespace>/tf and
+                /<tf_topic_namespace>/tf_static instead of /tf and /tf_static. Defaults to None.
 
         Returns:
             PoseData: PoseData object
@@ -370,7 +395,7 @@ class PoseData(RobotData):
         if time_range is not None and time_range_relative:
             time_range = cls.get_absolute_bag_time(path, np.array(time_range)).tolist()
 
-        tf_tree = cls._tf_tree_from_bag(path, ros_distro=ros_distro)
+        tf_tree = cls._tf_tree_from_bag(path, ros_distro=ros_distro, tf_topic_namespace=tf_topic_namespace)
         frame_chain = [child_frame]
         tf_types = []
         T_parent_child = []
@@ -393,10 +418,12 @@ class PoseData(RobotData):
         for joint_i in range(len(tf_types)):
             if tf_types[joint_i] == 'tf_static':
                 T_parent_child.append(cls.static_tf_from_bag(path,
-                    frame_chain[joint_i], frame_chain[joint_i+1], ros_distro=ros_distro))
+                    frame_chain[joint_i], frame_chain[joint_i+1], ros_distro=ros_distro,
+                    tf_topic_namespace=tf_topic_namespace))
             elif tf_types[joint_i] == 'tf':
                 T_parent_child.append(cls._from_bag_single_tf_joint(path,
-                    frame_chain[joint_i], frame_chain[joint_i+1], ros_distro=ros_distro, **joint_kwargs))
+                    frame_chain[joint_i], frame_chain[joint_i+1], ros_distro=ros_distro,
+                    tf_topic_namespace=tf_topic_namespace, time_range=time_range, **joint_kwargs))
             else:
                 assert False, "invalid tf type"
 
@@ -407,7 +434,8 @@ class PoseData(RobotData):
                 break
         assert len(times) > 0, "no times found"
 
-        # TODO: handle time range more efficiently
+        # trim to time_range: the dynamic joints are read with a margin around it so that poses
+        # can be interpolated at its ends (see _from_bag_single_tf_joint)
         times = [t for t in times if (time_range is None or (t >= time_range[0] and t <= time_range[1]))]
 
         poses = []
@@ -965,7 +993,10 @@ class PoseData(RobotData):
             writer.writerows(data)
 
     @classmethod
-    def any_static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str, ros_distro=None):
+    def any_static_tf_from_bag(
+            cls, path: str, parent_frame: str, child_frame: str,
+            ros_distro=None, tf_topic_namespace=None
+        ):
         """
         Extracts a static transform from a ROS bag file. Differs from static_tf_from_bag in that
         the parent need not be ancestor of the child in the tf tree. Transform is returned as T^parent_child,
@@ -977,11 +1008,13 @@ class PoseData(RobotData):
             child_frame (str): child frame
             ros_distro (str, optional): ROS2 distribution for typestore selection.
                 Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
+            tf_topic_namespace (str, optional): Read /<tf_topic_namespace>/tf_static instead of
+                /tf_static. Defaults to None.
 
         Returns:
             np.array, shape(4,4): static transform
         """
-        tf_tree = cls.static_tf_dict_from_bag(path, ros_distro=ros_distro)
+        tf_tree = cls.static_tf_dict_from_bag(path, ros_distro=ros_distro, tf_topic_namespace=tf_topic_namespace)
 
         tf_roots = []
         for _, (parent_frame_id, _) in tf_tree.items():
@@ -1005,7 +1038,10 @@ class PoseData(RobotData):
 
 
     @classmethod
-    def static_tf_from_bag(cls, path: str, parent_frame: str, child_frame: str, tf_tree=None, ros_distro=None):
+    def static_tf_from_bag(
+            cls, path: str, parent_frame: str, child_frame: str, tf_tree=None,
+            ros_distro=None, tf_topic_namespace=None
+        ):
         """
         Extracts a static transform from a ROS bag file. Transform is returned as T^parent_child,
         where T is a 4x4 rigid body transform and expresses the pose of the child in the parent frame,
@@ -1017,11 +1053,16 @@ class PoseData(RobotData):
             tf_tree (dict, optional): Pre-computed static transform dictionary. Defaults to None.
             ros_distro (str, optional): ROS2 distribution for typestore selection.
                 Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
+            tf_topic_namespace (str, optional): Read /<tf_topic_namespace>/tf_static instead of
+                /tf_static (if tf_tree is not given). Defaults to None.
 
         Returns:
             np.array, shape(4,4): static transform
         """
-        if tf_tree is None: tf_tree = cls.static_tf_dict_from_bag(path, ros_distro=ros_distro)
+        if tf_tree is None:
+            tf_tree = cls.static_tf_dict_from_bag(
+                path, ros_distro=ros_distro, tf_topic_namespace=tf_topic_namespace
+            )
 
         if child_frame not in tf_tree:
             assert False, f"child_frame {child_frame} not found in bag file {path}"
@@ -1052,7 +1093,7 @@ class PoseData(RobotData):
         return T
 
     @classmethod
-    def static_tf_dict_from_bag(cls, path: str, ros_distro=None):
+    def static_tf_dict_from_bag(cls, path: str, ros_distro=None, tf_topic_namespace=None):
         """Returns a dictionary of static transforms from a ROS bag file. The dictionary maps
         child_frame_id to a tuple of (parent_frame_id, transform_msg).
 
@@ -1060,6 +1101,8 @@ class PoseData(RobotData):
             path (str): Path to ROS bag.
             ros_distro (str, optional): ROS2 distribution for typestore selection.
                 Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
+            tf_topic_namespace (str, optional): Read /<tf_topic_namespace>/tf_static instead of
+                /tf_static. Defaults to None.
 
         Returns:
             dict: Static transform dictionary
@@ -1067,9 +1110,10 @@ class PoseData(RobotData):
         typestore = cls.distro_to_typestore(ros_distro)
         tf_tree = {}
         with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))], default_typestore=typestore) as reader:
-            connections = [x for x in reader.connections if x.topic == '/tf_static']
+            _, tf_static_topic = tf_topics(tf_topic_namespace)
+            connections = [x for x in reader.connections if x.topic == tf_static_topic]
             if len(connections) == 0:
-                assert False, f"topic /tf_static not found in bag file {path}"
+                assert False, f"topic {tf_static_topic} not found in bag file {path}"
             for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
@@ -1081,7 +1125,7 @@ class PoseData(RobotData):
         return tf_tree
 
     @classmethod
-    def _tf_tree_from_bag(cls, path: str, ros_distro=None):
+    def _tf_tree_from_bag(cls, path: str, ros_distro=None, tf_topic_namespace=None):
         """
         Returns a dict where each key is a child frame id and the value is a tuple including the parent frame id and
         whether the tf is static or dynamic.
@@ -1090,6 +1134,8 @@ class PoseData(RobotData):
             path (str): Path to ROS bag.
             ros_distro (str, optional): ROS2 distribution for typestore selection.
                 Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
+            tf_topic_namespace (str, optional): Read /<tf_topic_namespace>/tf and
+                /<tf_topic_namespace>/tf_static instead of /tf and /tf_static. Defaults to None.
 
         Returns:
             dict: tf tree dictionary
@@ -1097,8 +1143,11 @@ class PoseData(RobotData):
         typestore = cls.distro_to_typestore(ros_distro)
         tf_tree = {}
         with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))], default_typestore=typestore) as reader:
-            for tf_type in ['tf', 'tf_static']:
-                connections = [x for x in reader.connections if x.topic == f"/{tf_type}"]
+            for tf_type, topic in zip(['tf', 'tf_static'], tf_topics(tf_topic_namespace)):
+                connections = [x for x in reader.connections if x.topic == topic]
+                if len(connections) == 0:
+                    # (iter_raw_messages would read every topic)
+                    continue
                 for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
                     msg = reader.deserialize(rawdata, connection.msgtype)
                     if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
@@ -1116,7 +1165,8 @@ class PoseData(RobotData):
         return tf_tree
 
     @classmethod
-    def _from_bag_single_tf_joint(cls, path: str, parent_frame: str, child_frame: str, ros_distro=None, **kwargs):
+    def _from_bag_single_tf_joint(cls, path: str, parent_frame: str, child_frame: str, ros_distro=None,
+                                  tf_topic_namespace=None, time_range=None, **kwargs):
         """
         Extracts a dynamic transform from a ROS bag file in the form of a PoseData object.
         Transform is returned as T^parent_child, where T is a 4x4 rigid body transform and expresses
@@ -1128,20 +1178,32 @@ class PoseData(RobotData):
             child_frame (str): child frame
             ros_distro (str, optional): ROS2 distribution for typestore selection.
                 Options: 'foxy', 'humble', 'jazzy'. Defaults to None.
+            tf_topic_namespace (str, optional): Read /<tf_topic_namespace>/tf instead of /tf.
+                Defaults to None.
+            time_range (list, shape=(2,), optional): Absolute times; only messages recorded
+                within this range (plus a margin, so poses can be interpolated at its ends) are
+                read. Defaults to None.
 
         Returns:
             PoseData: PoseData object
         """
         typestore = cls.distro_to_typestore(ros_distro)
+        start, stop = None, None
+        if time_range is not None:
+            # bag record times can differ from the header stamps
+            margin = TF_TIME_RANGE_MARGIN_S + kwargs.get('time_tol', .1)
+            start = int((time_range[0] - margin) * 1e9)
+            stop = int((time_range[1] + margin) * 1e9)
         times = []
         positions = []
         orientations = []
 
         with AnyReader([Path(os.path.expanduser(os.path.expandvars(path)))], default_typestore=typestore) as reader:
-            connections = [x for x in reader.connections if x.topic == '/tf']
+            tf_topic, _ = tf_topics(tf_topic_namespace)
+            connections = [x for x in reader.connections if x.topic == tf_topic]
             if len(connections) == 0:
-                assert False, f"topic /tf not found in bag file {path}"
-            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections):
+                assert False, f"topic {tf_topic} not found in bag file {path}"
+            for (connection, timestamp, rawdata) in iter_raw_messages(reader, connections, start=start, stop=stop):
                 msg = reader.deserialize(rawdata, connection.msgtype)
                 if type(msg).__name__ == 'tf2_msgs__msg__TFMessage':
                     for transform_msg in msg.transforms:
